@@ -87,7 +87,7 @@ class NetworkMonitor {
     // MARK: - Network Checks
     
     private func checkWiFi() -> (Bool, String) {
-        // Check if Wi-Fi interface is up and has an IP address
+        // Check if network interface is up and has an IP address
         var addrs: UnsafeMutablePointer<ifaddrs>?
         var connected = false
         
@@ -104,9 +104,11 @@ class NetworkMonitor {
             guard let interface = ptr?.pointee else { continue }
             let name = String(cString: interface.ifa_name)
             
-            // Check for en0 (typical Wi-Fi interface) or en1
-            if name.hasPrefix("en") {
+            // Check for common network interfaces (en0, en1, en2 are typical on macOS)
+            // Skip loopback (lo0) and bridge interfaces
+            if name.hasPrefix("en") && !name.contains("bridge") {
                 let flags = Int32(interface.ifa_flags)
+                // Check if interface is up and running
                 if (flags & (IFF_UP | IFF_RUNNING)) == (IFF_UP | IFF_RUNNING) {
                     if interface.ifa_addr?.pointee.sa_family == UInt8(AF_INET) {
                         connected = true
@@ -150,20 +152,26 @@ class NetworkMonitor {
         var resolved = false
         
         let host = CFHostCreateWithName(nil, "www.google.com" as CFString).takeRetainedValue()
-        CFHostStartInfoResolution(host, .addresses, nil)
         
-        // Wait a bit for resolution
+        // Set timeout using dispatch
         DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
+            CFHostCancelInfoResolution(host, .addresses)
             semaphore.signal()
         }
         
+        CFHostStartInfoResolution(host, .addresses, nil)
+        
         var success: DarwinBoolean = false
-        if let addresses = CFHostGetAddressing(host, &success)?.takeUnretainedValue() as? [Data], !addresses.isEmpty {
+        if let addresses = CFHostGetAddressing(host, &success)?.takeUnretainedValue() as? [Data], 
+           !addresses.isEmpty, success.boolValue {
             resolved = true
             semaphore.signal()
         }
         
         _ = semaphore.wait(timeout: .now() + 3.0)
+        
+        // Ensure cleanup
+        CFHostCancelInfoResolution(host, .addresses)
         
         return (resolved, resolved ? "Working" : "Failed")
     }
@@ -184,7 +192,7 @@ class NetworkMonitor {
         var isReachable = false
         
         let task = Process()
-        task.launchPath = "/sbin/ping"
+        task.executableURL = URL(fileURLWithPath: "/sbin/ping")
         task.arguments = ["-c", "1", "-t", "2", host]
         
         let pipe = Pipe()

@@ -78,7 +78,7 @@ By checking each layer independently, TooCheapFi can tell you exactly where the 
 
 ### Scenario 1: Router is Off
 ```
-❌ Wi-Fi: Connected (192.168.1.100)
+✅ Wi-Fi: Connected (192.168.1.100)
 ❌ Router: Unreachable (192.168.1.1)
 ❌ ISP/Internet: No Internet
 ❌ DNS: Failed
