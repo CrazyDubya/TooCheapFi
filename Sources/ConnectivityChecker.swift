@@ -1,7 +1,7 @@
 import Foundation
 
 /// Handles multi-layer connectivity checks
-struct ConnectivityChecker {
+public struct ConnectivityChecker {
 
     private let ispTestTargets: [String]
     private let dnsTestDomains: [String]
@@ -9,7 +9,7 @@ struct ConnectivityChecker {
     private let pingTimeout: TimeInterval
     private let httpTimeout: TimeInterval
 
-    init(
+    public init(
         ispTestTargets: [String] = Preferences.shared.ispTestTargets,
         dnsTestDomains: [String] = Preferences.shared.dnsTestDomains,
         captivePortalURL: String = "http://captive.apple.com/hotspot-detect.html",
@@ -25,15 +25,21 @@ struct ConnectivityChecker {
 
     // MARK: - Gateway Check (Layer 2)
 
-    struct GatewayResult {
-        let reachable: Bool
-        let gatewayIP: String?
-        let latency: Double?
+    public struct GatewayResult {
+        public let reachable: Bool
+        public let gatewayIP: String?
+        public let latency: Double?
+
+        public init(reachable: Bool, gatewayIP: String?, latency: Double?) {
+            self.reachable = reachable
+            self.gatewayIP = gatewayIP
+            self.latency = latency
+        }
     }
 
     /// Checks if the default gateway is reachable
     /// Falls back to TCP if ICMP is blocked
-    func checkGateway() -> GatewayResult {
+    public func checkGateway() -> GatewayResult {
         guard let gateway = NetworkUtilities.getDefaultGateway() else {
             return GatewayResult(reachable: false, gatewayIP: nil, latency: nil)
         }
@@ -57,15 +63,21 @@ struct ConnectivityChecker {
 
     // MARK: - Internet Check (Layer 3)
 
-    struct InternetResult {
-        let reachable: Bool
-        let latency: Double?
-        let testedTargets: [String]
+    public struct InternetResult {
+        public let reachable: Bool
+        public let latency: Double?
+        public let testedTargets: [String]
+
+        public init(reachable: Bool, latency: Double?, testedTargets: [String]) {
+            self.reachable = reachable
+            self.latency = latency
+            self.testedTargets = testedTargets
+        }
     }
 
     /// Checks internet connectivity using multiple targets
     /// Tests ICMP first, falls back to TCP
-    func checkInternet() -> InternetResult {
+    public func checkInternet() -> InternetResult {
         var testedTargets: [String] = []
         var bestLatency: Double?
 
@@ -94,14 +106,20 @@ struct ConnectivityChecker {
 
     // MARK: - DNS Check (Layer 4)
 
-    struct DNSResult {
-        let working: Bool
-        let latency: Double?
-        let testedDomains: [String]
+    public struct DNSResult {
+        public let working: Bool
+        public let latency: Double?
+        public let testedDomains: [String]
+
+        public init(working: Bool, latency: Double?, testedDomains: [String]) {
+            self.working = working
+            self.latency = latency
+            self.testedDomains = testedDomains
+        }
     }
 
     /// Checks DNS resolution using multiple domains
-    func checkDNS() -> DNSResult {
+    public func checkDNS() -> DNSResult {
         var testedDomains: [String] = []
         var bestLatency: Double?
 
@@ -122,14 +140,20 @@ struct ConnectivityChecker {
 
     // MARK: - HTTP / Captive Portal Check (Layer 5)
 
-    struct HTTPResult {
-        let httpWorking: Bool
-        let captivePortalDetected: Bool
-        let captivePortalURL: String?
+    public struct HTTPResult {
+        public let httpWorking: Bool
+        public let captivePortalDetected: Bool
+        public let captivePortalURL: String?
+
+        public init(httpWorking: Bool, captivePortalDetected: Bool, captivePortalURL: String?) {
+            self.httpWorking = httpWorking
+            self.captivePortalDetected = captivePortalDetected
+            self.captivePortalURL = captivePortalURL
+        }
     }
 
     /// Checks HTTP connectivity and detects captive portals
-    func checkHTTP() -> HTTPResult {
+    public func checkHTTP() -> HTTPResult {
         let result = NetworkUtilities.httpGet(captivePortalURL, timeout: httpTimeout)
 
         guard result.success, let statusCode = result.statusCode else {

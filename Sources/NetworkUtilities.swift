@@ -148,6 +148,13 @@ public enum NetworkUtilities {
         public let statusCode: Int?
         public let body: String?
         public let redirectURL: String?
+
+        public init(success: Bool, statusCode: Int?, body: String?, redirectURL: String?) {
+            self.success = success
+            self.statusCode = statusCode
+            self.body = body
+            self.redirectURL = redirectURL
+        }
     }
 
     /// Performs an HTTP GET request

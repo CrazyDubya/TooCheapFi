@@ -5,9 +5,9 @@ import CoreWLAN
 
 /// Main network monitoring coordinator
 /// Delegates to specialized modules for specific checks
-class NetworkMonitor {
-    var onStatusChange: ((NetworkStatus) -> Void)?
-    @ThreadSafe private(set) var currentStatus: NetworkStatus = .unknown
+public class NetworkMonitor {
+    public var onStatusChange: ((NetworkStatus) -> Void)?
+    @ThreadSafe public private(set) var currentStatus: NetworkStatus = .unknown
     @ThreadSafe private var previousStatus: NetworkStatus?
     private var timer: Timer?
     private let pathMonitor = NWPathMonitor()
@@ -23,7 +23,7 @@ class NetworkMonitor {
     @ThreadSafe private var speedTestInProgress = false
 
     // Pause/resume state
-    @ThreadSafe private(set) var isPaused = false
+    @ThreadSafe public private(set) var isPaused = false
     @ThreadSafe private var pauseEndTime: Date?
 
     // Reusable URLSession for speed tests
@@ -34,6 +34,8 @@ class NetworkMonitor {
         config.waitsForConnectivity = false
         return URLSession(configuration: config)
     }()
+
+    public init() {}
 
     deinit {
         stopMonitoring()
@@ -46,7 +48,7 @@ class NetworkMonitor {
 
     // MARK: - Lifecycle
 
-    func startMonitoring() {
+    public func startMonitoring() {
         checkStatus()
 
         let interval = TimeInterval(Preferences.shared.checkIntervalSeconds)
@@ -62,7 +64,7 @@ class NetworkMonitor {
         pathMonitor.start(queue: monitorQueue)
     }
 
-    func stopMonitoring() {
+    public func stopMonitoring() {
         timer?.invalidate()
         timer = nil
         pathMonitor.cancel()
@@ -71,14 +73,14 @@ class NetworkMonitor {
     // MARK: - Pause/Resume
 
     /// Pauses monitoring for the specified number of minutes
-    func pauseMonitoring(minutes: Int) {
+    public func pauseMonitoring(minutes: Int) {
         isPaused = true
         pauseEndTime = Date().addingTimeInterval(TimeInterval(minutes * 60))
         logInfo("Monitoring paused for \(minutes) minutes")
     }
 
     /// Resumes monitoring immediately
-    func resumeMonitoring() {
+    public func resumeMonitoring() {
         isPaused = false
         pauseEndTime = nil
         logInfo("Monitoring resumed")
@@ -86,7 +88,7 @@ class NetworkMonitor {
     }
 
     /// Returns the remaining pause time in seconds, or nil if not paused
-    var remainingPauseTime: TimeInterval? {
+    public var remainingPauseTime: TimeInterval? {
         guard isPaused, let endTime = pauseEndTime else { return nil }
         let remaining = endTime.timeIntervalSinceNow
         return remaining > 0 ? remaining : nil
@@ -104,7 +106,7 @@ class NetworkMonitor {
 
     // MARK: - Status Check
 
-    func checkStatus() {
+    public func checkStatus() {
         // Check if pause has expired
         checkPauseExpiry()
 
@@ -192,7 +194,7 @@ class NetworkMonitor {
 
     // MARK: - Speed Test
 
-    func runSpeedTest(completion: @escaping (SpeedTestResult) -> Void) {
+    public func runSpeedTest(completion: @escaping (SpeedTestResult) -> Void) {
         guard !speedTestInProgress else {
             completion(lastSpeedTest)
             return

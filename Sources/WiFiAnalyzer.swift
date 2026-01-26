@@ -2,15 +2,17 @@ import Foundation
 import CoreWLAN
 
 /// Handles Wi-Fi diagnostics and channel analysis
-struct WiFiAnalyzer {
+public struct WiFiAnalyzer {
 
     // Non-DFS 5 GHz channels
     private let preferred5GHzChannels = [36, 40, 44, 48, 149, 153, 157, 161, 165]
 
+    public init() {}
+
     // MARK: - Wi-Fi Info
 
     /// Gets detailed information about the current Wi-Fi connection
-    func getWiFiInfo() -> WiFiInfo? {
+    public func getWiFiInfo() -> WiFiInfo? {
         guard let interface = CWWiFiClient.shared().interface() else {
             return nil
         }
@@ -49,16 +51,30 @@ struct WiFiAnalyzer {
 
     // MARK: - Channel Analysis
 
-    struct ChannelAnalysisResult {
-        let neighbors: [NeighboringNetwork]
-        let analysis2GHz: [ChannelAnalysis]
-        let recommended2GHz: Int?
-        let analysis5GHz: [ChannelAnalysis]
-        let recommended5GHz: Int?
+    public struct ChannelAnalysisResult {
+        public let neighbors: [NeighboringNetwork]
+        public let analysis2GHz: [ChannelAnalysis]
+        public let recommended2GHz: Int?
+        public let analysis5GHz: [ChannelAnalysis]
+        public let recommended5GHz: Int?
+
+        public init(
+            neighbors: [NeighboringNetwork],
+            analysis2GHz: [ChannelAnalysis],
+            recommended2GHz: Int?,
+            analysis5GHz: [ChannelAnalysis],
+            recommended5GHz: Int?
+        ) {
+            self.neighbors = neighbors
+            self.analysis2GHz = analysis2GHz
+            self.recommended2GHz = recommended2GHz
+            self.analysis5GHz = analysis5GHz
+            self.recommended5GHz = recommended5GHz
+        }
     }
 
     /// Scans for neighboring networks and analyzes channel congestion
-    func analyzeChannels() -> ChannelAnalysisResult {
+    public func analyzeChannels() -> ChannelAnalysisResult {
         guard let interface = CWWiFiClient.shared().interface() else {
             return ChannelAnalysisResult(
                 neighbors: [],

@@ -1,8 +1,8 @@
 import Foundation
 import SQLite3
 
-class HistoryStore {
-    static let shared = HistoryStore()
+public class HistoryStore {
+    public static let shared = HistoryStore()
 
     private var db: OpaquePointer?
     private let dbPath: String
@@ -10,7 +10,7 @@ class HistoryStore {
     private var outageStartTime: Date?
     private let dbQueue = DispatchQueue(label: "com.toocheapfi.database", qos: .utility)
 
-    init() {
+    public init() {
         dbPath = Preferences.historyPath.path
 
         dbQueue.sync {
@@ -107,7 +107,7 @@ class HistoryStore {
 
     // MARK: - Record Events
 
-    func recordStatus(_ status: NetworkStatus) {
+    public func recordStatus(_ status: NetworkStatus) {
         guard Preferences.shared.historyEnabled else { return }
 
         let errorLayer = determineErrorLayer(status)
@@ -245,7 +245,7 @@ class HistoryStore {
 
     // MARK: - Record Speed Test
 
-    func recordSpeedTest(_ result: SpeedTestResult) {
+    public func recordSpeedTest(_ result: SpeedTestResult) {
         guard Preferences.shared.historyEnabled else { return }
 
         let sql = """
@@ -272,17 +272,35 @@ class HistoryStore {
 
     // MARK: - Query History
 
-    struct OutageRecord {
-        let id: Int64
-        let startTime: String
-        let endTime: String?
-        let durationSeconds: Int?
-        let affectedLayer: String
-        let cause: String?
-        let resolved: Bool
+    public struct OutageRecord {
+        public let id: Int64
+        public let startTime: String
+        public let endTime: String?
+        public let durationSeconds: Int?
+        public let affectedLayer: String
+        public let cause: String?
+        public let resolved: Bool
+
+        public init(
+            id: Int64,
+            startTime: String,
+            endTime: String?,
+            durationSeconds: Int?,
+            affectedLayer: String,
+            cause: String?,
+            resolved: Bool
+        ) {
+            self.id = id
+            self.startTime = startTime
+            self.endTime = endTime
+            self.durationSeconds = durationSeconds
+            self.affectedLayer = affectedLayer
+            self.cause = cause
+            self.resolved = resolved
+        }
     }
 
-    func getRecentOutages(limit: Int = 10) -> [OutageRecord] {
+    public func getRecentOutages(limit: Int = 10) -> [OutageRecord] {
         let sql = """
         SELECT id, start_time, end_time, duration_seconds, affected_layer, cause, resolved
         FROM outages
@@ -316,7 +334,7 @@ class HistoryStore {
         return outages
     }
 
-    func getUptimePercentage(hours: Int = 24) -> Double {
+    public func getUptimePercentage(hours: Int = 24) -> Double {
         let sql = """
         SELECT
             COUNT(*) as total,
@@ -346,7 +364,7 @@ class HistoryStore {
         return 100
     }
 
-    func getTotalOutageTime(hours: Int = 24) -> Int {
+    public func getTotalOutageTime(hours: Int = 24) -> Int {
         let sql = """
         SELECT COALESCE(SUM(duration_seconds), 0)
         FROM outages
@@ -374,7 +392,7 @@ class HistoryStore {
     // MARK: - Export
 
     /// Streams CSV export directly to file (memory efficient for large datasets)
-    func streamExportToCSV(to url: URL) throws {
+    public func streamExportToCSV(to url: URL) throws {
         // Create or truncate file
         FileManager.default.createFile(atPath: url.path, contents: nil)
         let handle = try FileHandle(forWritingTo: url)
@@ -421,7 +439,7 @@ class HistoryStore {
         logInfo("Exported \(rowCount) rows to \(url.path)")
     }
 
-    func exportToCSV() -> String {
+    public func exportToCSV() -> String {
         var csv = "Timestamp,Interface,Gateway,Internet,DNS,HTTP,RSSI,SNR,Latency,Quality,Error\n"
 
         let sql = """
@@ -458,7 +476,7 @@ class HistoryStore {
         return csv
     }
 
-    func exportOutagesToCSV() -> String {
+    public func exportOutagesToCSV() -> String {
         var csv = "Start Time,End Time,Duration (s),Affected Layer,Cause,Resolved\n"
 
         let sql = """

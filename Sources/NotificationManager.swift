@@ -1,8 +1,8 @@
 import Foundation
 import UserNotifications
 
-class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
-    static let shared = NotificationManager()
+public class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
+    public static let shared = NotificationManager()
 
     private var lastNotifiedStatus: Bool?
     private var outageStartTime: Date?
@@ -10,14 +10,14 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private var lastSignalDropNotification: Date?
     private let signalDropDebounceInterval: TimeInterval = 30  // seconds
 
-    override init() {
+    public override init() {
         super.init()
         UNUserNotificationCenter.current().delegate = self
     }
 
     // MARK: - Permission
 
-    func requestPermission(completion: @escaping (Bool) -> Void) {
+    public func requestPermission(completion: @escaping (Bool) -> Void) {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             DispatchQueue.main.async {
                 if let error = error {
@@ -28,7 +28,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         }
     }
 
-    func checkPermission(completion: @escaping (Bool) -> Void) {
+    public func checkPermission(completion: @escaping (Bool) -> Void) {
         UNUserNotificationCenter.current().getNotificationSettings { settings in
             DispatchQueue.main.async {
                 completion(settings.authorizationStatus == .authorized)
@@ -38,7 +38,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Notifications
 
-    func handleStatusChange(from oldStatus: NetworkStatus?, to newStatus: NetworkStatus) {
+    public func handleStatusChange(from oldStatus: NetworkStatus?, to newStatus: NetworkStatus) {
         guard notificationsEnabled else { return }
 
         let wasConnected = oldStatus?.isFullyConnected ?? true
@@ -174,11 +174,11 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
 
     // MARK: - Settings
 
-    func setEnabled(_ enabled: Bool) {
+    public func setEnabled(_ enabled: Bool) {
         notificationsEnabled = enabled
     }
 
-    var isEnabled: Bool {
+    public var isEnabled: Bool {
         notificationsEnabled
     }
 

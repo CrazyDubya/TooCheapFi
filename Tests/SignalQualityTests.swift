@@ -1,147 +1,120 @@
 import XCTest
 @testable import TooCheapFiCore
 
-/// Tests for signal quality classification
+/// Tests for signal quality classification using production code
 final class SignalQualityTests: XCTestCase {
 
-    // MARK: - RSSI Classification Tests
+    // MARK: - RSSI Classification Tests (Using Production SignalQuality.from(rssi:))
 
     func testExcellentSignal() {
-        XCTAssertEqual(classifyRSSI(-30), "excellent")
-        XCTAssertEqual(classifyRSSI(-40), "excellent")
-        XCTAssertEqual(classifyRSSI(-50), "excellent")
+        XCTAssertEqual(SignalQuality.from(rssi: -30), .excellent)
+        XCTAssertEqual(SignalQuality.from(rssi: -40), .excellent)
+        XCTAssertEqual(SignalQuality.from(rssi: -50), .excellent)
     }
 
     func testGoodSignal() {
-        XCTAssertEqual(classifyRSSI(-51), "good")
-        XCTAssertEqual(classifyRSSI(-55), "good")
-        XCTAssertEqual(classifyRSSI(-60), "good")
+        XCTAssertEqual(SignalQuality.from(rssi: -51), .good)
+        XCTAssertEqual(SignalQuality.from(rssi: -55), .good)
+        XCTAssertEqual(SignalQuality.from(rssi: -60), .good)
     }
 
     func testFairSignal() {
-        XCTAssertEqual(classifyRSSI(-61), "fair")
-        XCTAssertEqual(classifyRSSI(-65), "fair")
-        XCTAssertEqual(classifyRSSI(-70), "fair")
+        XCTAssertEqual(SignalQuality.from(rssi: -61), .fair)
+        XCTAssertEqual(SignalQuality.from(rssi: -65), .fair)
+        XCTAssertEqual(SignalQuality.from(rssi: -70), .fair)
     }
 
     func testWeakSignal() {
-        XCTAssertEqual(classifyRSSI(-71), "weak")
-        XCTAssertEqual(classifyRSSI(-75), "weak")
-        XCTAssertEqual(classifyRSSI(-80), "weak")
+        XCTAssertEqual(SignalQuality.from(rssi: -71), .weak)
+        XCTAssertEqual(SignalQuality.from(rssi: -75), .weak)
+        XCTAssertEqual(SignalQuality.from(rssi: -80), .weak)
     }
 
     func testVeryWeakSignal() {
-        XCTAssertEqual(classifyRSSI(-81), "veryWeak")
-        XCTAssertEqual(classifyRSSI(-90), "veryWeak")
-        XCTAssertEqual(classifyRSSI(-100), "veryWeak")
+        XCTAssertEqual(SignalQuality.from(rssi: -81), .veryWeak)
+        XCTAssertEqual(SignalQuality.from(rssi: -90), .veryWeak)
+        XCTAssertEqual(SignalQuality.from(rssi: -100), .veryWeak)
     }
 
-    // MARK: - SNR Classification Tests
+    // MARK: - SNR Classification Tests (Using Production SignalQuality.from(snr:))
 
     func testExcellentSNR() {
-        XCTAssertTrue(isExcellentSNR(40))
-        XCTAssertTrue(isExcellentSNR(35))
+        XCTAssertEqual(SignalQuality.from(snr: 40), .excellent)
+        XCTAssertEqual(SignalQuality.from(snr: 45), .excellent)
     }
 
     func testGoodSNR() {
-        XCTAssertTrue(isGoodSNR(25))
-        XCTAssertTrue(isGoodSNR(30))
+        XCTAssertEqual(SignalQuality.from(snr: 25), .good)
+        XCTAssertEqual(SignalQuality.from(snr: 30), .good)
+        XCTAssertEqual(SignalQuality.from(snr: 39), .good)
     }
 
-    func testPoorSNR() {
-        XCTAssertTrue(isPoorSNR(10))
-        XCTAssertTrue(isPoorSNR(5))
+    func testFairSNR() {
+        XCTAssertEqual(SignalQuality.from(snr: 15), .fair)
+        XCTAssertEqual(SignalQuality.from(snr: 20), .fair)
+        XCTAssertEqual(SignalQuality.from(snr: 24), .fair)
     }
 
-    // MARK: - Channel Band Tests
+    func testWeakSNR() {
+        XCTAssertEqual(SignalQuality.from(snr: 10), .weak)
+        XCTAssertEqual(SignalQuality.from(snr: 14), .weak)
+    }
+
+    func testVeryWeakSNR() {
+        XCTAssertEqual(SignalQuality.from(snr: 9), .veryWeak)
+        XCTAssertEqual(SignalQuality.from(snr: 5), .veryWeak)
+        XCTAssertEqual(SignalQuality.from(snr: 0), .veryWeak)
+    }
+
+    // MARK: - Channel Band Tests (Validates expected channel ranges)
 
     func testIs2_4GHzChannel() {
-        XCTAssertTrue(is2_4GHzChannel(1))
-        XCTAssertTrue(is2_4GHzChannel(6))
-        XCTAssertTrue(is2_4GHzChannel(11))
-        XCTAssertTrue(is2_4GHzChannel(13))
-        XCTAssertFalse(is2_4GHzChannel(36))
-        XCTAssertFalse(is2_4GHzChannel(149))
+        // 2.4 GHz channels are 1-14
+        let channels2_4GHz = [1, 6, 11, 13]
+        for channel in channels2_4GHz {
+            XCTAssertTrue(channel >= 1 && channel <= 14, "Channel \(channel) should be 2.4 GHz range")
+        }
+
+        // 5 GHz channels are not in 2.4 GHz range
+        let channels5GHz = [36, 149]
+        for channel in channels5GHz {
+            XCTAssertFalse(channel >= 1 && channel <= 14, "Channel \(channel) should not be 2.4 GHz range")
+        }
     }
 
     func testIs5GHzChannel() {
-        XCTAssertTrue(is5GHzChannel(36))
-        XCTAssertTrue(is5GHzChannel(44))
-        XCTAssertTrue(is5GHzChannel(149))
-        XCTAssertTrue(is5GHzChannel(165))
-        XCTAssertFalse(is5GHzChannel(1))
-        XCTAssertFalse(is5GHzChannel(11))
+        let channels5GHz = [36, 44, 149, 165]
+        for channel in channels5GHz {
+            XCTAssertTrue(channel >= 36 && channel <= 177, "Channel \(channel) should be 5 GHz range")
+        }
     }
 
     func testNonOverlapping2_4GHzChannels() {
+        // Non-overlapping 2.4 GHz channels are 1, 6, 11
         let nonOverlapping = [1, 6, 11]
         XCTAssertEqual(nonOverlapping.count, 3)
         XCTAssertEqual(nonOverlapping[1] - nonOverlapping[0], 5)
         XCTAssertEqual(nonOverlapping[2] - nonOverlapping[1], 5)
     }
 
-    // MARK: - Congestion Level Tests
+    // MARK: - SignalQuality Enum Tests
 
-    func testCongestionLevel_None() {
-        XCTAssertEqual(congestionLevel(networks: 0), "None")
+    func testSignalQualityRawValues() {
+        XCTAssertEqual(SignalQuality.excellent.rawValue, "Excellent")
+        XCTAssertEqual(SignalQuality.good.rawValue, "Good")
+        XCTAssertEqual(SignalQuality.fair.rawValue, "Fair")
+        XCTAssertEqual(SignalQuality.weak.rawValue, "Weak")
+        XCTAssertEqual(SignalQuality.veryWeak.rawValue, "Very Weak")
+        XCTAssertEqual(SignalQuality.none.rawValue, "No Signal")
     }
 
-    func testCongestionLevel_Low() {
-        XCTAssertEqual(congestionLevel(networks: 1), "Low")
-        XCTAssertEqual(congestionLevel(networks: 2), "Low")
-        XCTAssertEqual(congestionLevel(networks: 3), "Low")
-    }
+    // MARK: - ConnectionQuality Tests
 
-    func testCongestionLevel_Medium() {
-        XCTAssertEqual(congestionLevel(networks: 4), "Medium")
-        XCTAssertEqual(congestionLevel(networks: 5), "Medium")
-        XCTAssertEqual(congestionLevel(networks: 7), "Medium")
-    }
-
-    func testCongestionLevel_High() {
-        XCTAssertEqual(congestionLevel(networks: 8), "High")
-        XCTAssertEqual(congestionLevel(networks: 15), "High")
-        XCTAssertEqual(congestionLevel(networks: 20), "High")
-    }
-
-    // MARK: - Helper Functions
-
-    private func classifyRSSI(_ rssi: Int) -> String {
-        switch rssi {
-        case -50...0: return "excellent"
-        case -60..<(-50): return "good"
-        case -70..<(-60): return "fair"
-        case -80..<(-70): return "weak"
-        default: return "veryWeak"
-        }
-    }
-
-    private func isExcellentSNR(_ snr: Int) -> Bool {
-        return snr >= 35
-    }
-
-    private func isGoodSNR(_ snr: Int) -> Bool {
-        return snr >= 25 && snr < 35
-    }
-
-    private func isPoorSNR(_ snr: Int) -> Bool {
-        return snr < 15
-    }
-
-    private func is2_4GHzChannel(_ channel: Int) -> Bool {
-        return channel >= 1 && channel <= 14
-    }
-
-    private func is5GHzChannel(_ channel: Int) -> Bool {
-        return channel >= 36 && channel <= 177
-    }
-
-    private func congestionLevel(networks: Int) -> String {
-        switch networks {
-        case 0: return "None"
-        case 1...3: return "Low"
-        case 4...7: return "Medium"
-        default: return "High"
-        }
+    func testConnectionQualityScores() {
+        XCTAssertEqual(ConnectionQuality.excellent.score, 100)
+        XCTAssertEqual(ConnectionQuality.good.score, 75)
+        XCTAssertEqual(ConnectionQuality.fair.score, 50)
+        XCTAssertEqual(ConnectionQuality.poor.score, 25)
+        XCTAssertEqual(ConnectionQuality.none.score, 0)
     }
 }

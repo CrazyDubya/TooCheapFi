@@ -1,21 +1,35 @@
 import Foundation
 
 /// Analyzes network status to identify issues and generate recommendations
-struct IssueAnalyzer {
+public struct IssueAnalyzer {
 
     // MARK: - Analysis Result
 
-    struct AnalysisResult {
-        let issues: [NetworkIssue]
-        let recommendations: [NetworkRecommendation]
-        let qualityScore: Int
-        let overallQuality: ConnectionQuality
+    public struct AnalysisResult {
+        public let issues: [NetworkIssue]
+        public let recommendations: [NetworkRecommendation]
+        public let qualityScore: Int
+        public let overallQuality: ConnectionQuality
+
+        public init(
+            issues: [NetworkIssue],
+            recommendations: [NetworkRecommendation],
+            qualityScore: Int,
+            overallQuality: ConnectionQuality
+        ) {
+            self.issues = issues
+            self.recommendations = recommendations
+            self.qualityScore = qualityScore
+            self.overallQuality = overallQuality
+        }
     }
+
+    public init() {}
 
     // MARK: - Main Analysis
 
     /// Analyzes the network status and returns issues, recommendations, and quality score
-    func analyze(_ status: NetworkStatus) -> AnalysisResult {
+    public func analyze(_ status: NetworkStatus) -> AnalysisResult {
         var issues: [NetworkIssue] = []
         var recommendations: [NetworkRecommendation] = []
 
