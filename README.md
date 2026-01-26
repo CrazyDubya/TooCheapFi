@@ -168,13 +168,47 @@ make clean
 - The app requires network access permissions
 - macOS may prompt you to allow network access on first run
 
+## Roadmap
+
+TooCheapFi is evolving from a simple monitor into a comprehensive network diagnostic tool. See our [Planning Document](PLANNING.md) for the full vision.
+
+### Current Status: v0.1 (Prototype)
+
+Working features:
+- [x] Four-layer connectivity diagnostics
+- [x] Menu bar integration
+- [x] Actionable fix suggestions
+- [x] Auto-refresh on network changes
+
+### Coming in v1.0
+
+- [ ] **Homebrew installation**: `brew install toocheapfi`
+- [ ] **User preferences**: Customize check intervals, DNS servers
+- [ ] **Outage history**: Track connectivity over time
+- [ ] **Notifications**: Get alerted when connection drops/restores
+- [ ] **ISP reports**: Export outage history to prove issues to your ISP
+
+### Future Plans
+
+- [ ] **Cross-platform**: Linux and Windows support (Rust core)
+- [ ] **Latency tracking**: Monitor network quality over time
+- [ ] **Advanced diagnostics**: Bandwidth testing, traceroute
+
 ## Contributing
 
 Contributions are welcome! Please feel free to submit issues or pull requests.
 
+### Development Documentation
+
+- [PLANNING.md](PLANNING.md) - Strategic vision and roadmap
+- [docs/PHASE1-TECHNICAL-SPEC.md](docs/PHASE1-TECHNICAL-SPEC.md) - Technical specifications
+- [docs/ACTION-ITEMS.md](docs/ACTION-ITEMS.md) - Prioritized task list
+- [BUILDING.md](BUILDING.md) - Build instructions
+- [UI-GUIDE.md](UI-GUIDE.md) - UI documentation
+
 ## License
 
-This project is open source. Feel free to use and modify as needed.
+MIT License - See [LICENSE](LICENSE) for details.
 
 ## Why "TooCheapFi"?
 
