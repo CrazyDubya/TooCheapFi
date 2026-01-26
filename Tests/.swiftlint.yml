@@ -1,40 +1,66 @@
 # SwiftLint Configuration for TooCheapFi Tests
-# This config inherits from the parent and relaxes rules for test code
+# Standalone config with relaxed rules for test code
 
-parent_config: ../.swiftlint.yml
-
-# Relaxed rules for test files
-function_body_length:
-  warning: 100   # Allow longer test methods
-  error: 200
-
-cyclomatic_complexity:
-  warning: 20    # Allow more complex test setup
-  error: 40
-
+# Relaxed thresholds for test files
 line_length:
-  warning: 150   # Allow longer assertion lines
+  warning: 150
   error: 250
   ignores_comments: true
   ignores_urls: true
 
-type_body_length:
-  warning: 400   # Test classes can be larger
-  error: 800
-
 file_length:
-  warning: 600   # Test files can be larger
+  warning: 600
   error: 1200
   ignore_comment_only_lines: true
+
+type_body_length:
+  warning: 400
+  error: 800
+
+function_body_length:
+  warning: 100
+  error: 200
+
+function_parameter_count:
+  warning: 8
+  error: 10
+
+cyclomatic_complexity:
+  warning: 20
+  error: 40
+
+nesting:
+  type_level: 3
+  function_level: 4
+
+identifier_name:
+  min_length:
+    warning: 1
+    error: 0
+  max_length:
+    warning: 60
+    error: 80
+  excluded:
+    - i
+    - j
+    - k
+    - x
+    - y
+    - z
+    - id
+    - ip
+    - db
+    - ok
+
+large_tuple:
+  warning: 4
+  error: 6
 
 # Disable rules not suitable for tests
 disabled_rules:
   - todo
   - trailing_comma
   - opening_brace
-  - implicitly_unwrapped_optional  # Allow IUOs in test setup
-
-# Override custom rules for tests
-custom_rules:
-  no_print_in_production:
-    severity: warning  # Downgrade to warning in tests
+  - implicitly_unwrapped_optional
+  - discouraged_optional_boolean
+  - function_default_parameter_at_end

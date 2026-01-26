@@ -139,7 +139,8 @@ custom_rules:
     name: "No print statements"
     regex: "\\bprint\\s*\\("
     message: "Use Logger instead of print() for production code"
-    severity: error  # Escalated from warning
+    severity: error
+    included: "Sources/"  # Only apply to production code, not tests
 
   no_force_cast:
     name: "No force casting"
