@@ -11,15 +11,18 @@ class NetworkMonitor {
     private let pathMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.toocheapfi.networkmonitor")
 
-    // Configuration - multiple targets to avoid single points of failure
-    private let ispTestTargets = ["8.8.8.8", "1.1.1.1", "208.67.222.222"]  // Google, Cloudflare, OpenDNS
-    private let dnsTestDomains = ["apple.com", "cloudflare.com", "microsoft.com"]
+    // Configuration from Preferences
+    private var ispTestTargets: [String] { Preferences.shared.ispTestTargets }
+    private var dnsTestDomains: [String] { Preferences.shared.dnsTestDomains }
     private let captivePortalURL = "http://captive.apple.com/hotspot-detect.html"
-    private let pingTimeout: TimeInterval = 2.0
+    private var pingTimeout: TimeInterval { TimeInterval(Preferences.shared.pingTimeoutSeconds) }
     private let httpTimeout: TimeInterval = 5.0
 
     // Speed test configuration
-    private let speedTestURL = "https://speed.cloudflare.com/__down?bytes=10000000"  // 10MB test file
+    private var speedTestURL: String {
+        let bytes = Preferences.shared.speedTestSizeMB * 1_000_000
+        return "https://speed.cloudflare.com/__down?bytes=\(bytes)"
+    }
     private var lastSpeedTest: SpeedTestResult = .notRun
     private var speedTestInProgress = false
 
@@ -30,8 +33,9 @@ class NetworkMonitor {
         // Initial check
         checkStatus()
 
-        // Set up periodic checks every 5 seconds
-        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+        // Set up periodic checks based on preferences
+        let interval = TimeInterval(Preferences.shared.checkIntervalSeconds)
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.checkStatus()
         }
 
@@ -118,6 +122,9 @@ class NetworkMonitor {
                 // Trigger notifications for status changes
                 NotificationManager.shared.handleStatusChange(from: self.previousStatus, to: status)
 
+                // Record to history
+                HistoryStore.shared.recordStatus(status)
+
                 self.previousStatus = self.currentStatus
                 self.currentStatus = status
                 self.onStatusChange?(status)
@@ -197,6 +204,9 @@ class NetworkMonitor {
                 testServer: "Cloudflare",
                 status: .completed
             )
+
+            // Record speed test to history
+            HistoryStore.shared.recordSpeedTest(self.lastSpeedTest)
 
             DispatchQueue.main.async {
                 var status = self.currentStatus

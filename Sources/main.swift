@@ -1,6 +1,7 @@
 import Cocoa
 import SystemConfiguration
 import Network
+import UniformTypeIdentifiers
 
 @main
 class TooCheapFiApp: NSObject, NSApplicationDelegate {
@@ -196,6 +197,31 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
             menu.addItem(createMenuItem("   ❌ Speed test failed"))
         }
 
+        // Statistics (if history is enabled)
+        if Preferences.shared.historyEnabled {
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(createSectionHeader("Statistics (24h)"))
+
+            let uptime = HistoryStore.shared.getUptimePercentage(hours: 24)
+            let uptimeEmoji = uptime >= 99 ? "🟢" : (uptime >= 95 ? "🟡" : "🔴")
+            menu.addItem(createMenuItem("   \(uptimeEmoji) Uptime: \(String(format: "%.1f", uptime))%"))
+
+            let outageSeconds = HistoryStore.shared.getTotalOutageTime(hours: 24)
+            if outageSeconds > 0 {
+                let outageStr = formatDuration(outageSeconds)
+                menu.addItem(createMenuItem("   ⏱ Total downtime: \(outageStr)"))
+            }
+
+            let recentOutages = HistoryStore.shared.getRecentOutages(limit: 3)
+            if !recentOutages.isEmpty {
+                menu.addItem(createMenuItem("   Recent outages:"))
+                for outage in recentOutages {
+                    let durationStr = outage.durationSeconds.map { formatDuration($0) } ?? "ongoing"
+                    menu.addItem(createMenuItem("      • \(outage.affectedLayer): \(durationStr)"))
+                }
+            }
+        }
+
         // Channel Analysis (if on Wi-Fi and we have data)
         if !status.channelAnalysis.isEmpty {
             menu.addItem(NSMenuItem.separator())
@@ -311,6 +337,21 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
 
         menu.addItem(NSMenuItem.separator())
 
+        // Export submenu
+        let exportMenu = NSMenu()
+
+        let exportHistoryItem = NSMenuItem(title: "Export History to CSV...", action: #selector(exportHistory), keyEquivalent: "")
+        exportHistoryItem.target = self
+        exportMenu.addItem(exportHistoryItem)
+
+        let exportOutagesItem = NSMenuItem(title: "Export Outages to CSV...", action: #selector(exportOutages), keyEquivalent: "")
+        exportOutagesItem.target = self
+        exportMenu.addItem(exportOutagesItem)
+
+        let exportMenuItem = NSMenuItem(title: "Export Data", action: nil, keyEquivalent: "")
+        exportMenuItem.submenu = exportMenu
+        menu.addItem(exportMenuItem)
+
         // Settings submenu
         let settingsMenu = NSMenu()
 
@@ -321,6 +362,20 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         )
         notificationItem.target = self
         settingsMenu.addItem(notificationItem)
+
+        let historyItem = NSMenuItem(
+            title: Preferences.shared.historyEnabled ? "✓ History Logging Enabled" : "  History Logging Disabled",
+            action: #selector(toggleHistory),
+            keyEquivalent: ""
+        )
+        historyItem.target = self
+        settingsMenu.addItem(historyItem)
+
+        settingsMenu.addItem(NSMenuItem.separator())
+
+        let openConfigItem = NSMenuItem(title: "Open Config File...", action: #selector(openConfig), keyEquivalent: "")
+        openConfigItem.target = self
+        settingsMenu.addItem(openConfigItem)
 
         let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
         settingsMenuItem.submenu = settingsMenu
@@ -408,6 +463,63 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         }
         // Refresh menu to show updated state
         updateMenu(with: currentStatus)
+    }
+
+    @objc func exportHistory() {
+        let csv = HistoryStore.shared.exportToCSV()
+        saveCSV(csv, defaultName: "toocheapfi-history.csv")
+    }
+
+    @objc func exportOutages() {
+        let csv = HistoryStore.shared.exportOutagesToCSV()
+        saveCSV(csv, defaultName: "toocheapfi-outages.csv")
+    }
+
+    private func saveCSV(_ content: String, defaultName: String) {
+        let savePanel = NSSavePanel()
+        savePanel.allowedContentTypes = [.commaSeparatedText]
+        savePanel.nameFieldStringValue = defaultName
+        savePanel.title = "Export Data"
+
+        if savePanel.runModal() == .OK, let url = savePanel.url {
+            do {
+                try content.write(to: url, atomically: true, encoding: .utf8)
+            } catch {
+                let alert = NSAlert()
+                alert.messageText = "Export Failed"
+                alert.informativeText = error.localizedDescription
+                alert.alertStyle = .warning
+                alert.runModal()
+            }
+        }
+    }
+
+    @objc func toggleHistory() {
+        var prefs = Preferences.shared
+        do {
+            try prefs.update { $0.historyEnabled.toggle() }
+        } catch {
+            print("Failed to save preferences: \(error)")
+        }
+        updateMenu(with: currentStatus)
+    }
+
+    @objc func openConfig() {
+        Preferences.openConfigInFinder()
+    }
+
+    private func formatDuration(_ seconds: Int) -> String {
+        let hours = seconds / 3600
+        let mins = (seconds % 3600) / 60
+        let secs = seconds % 60
+
+        if hours > 0 {
+            return "\(hours)h \(mins)m"
+        } else if mins > 0 {
+            return "\(mins)m \(secs)s"
+        } else {
+            return "\(secs)s"
+        }
     }
 
     @objc func quitApp() {

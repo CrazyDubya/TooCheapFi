@@ -1,36 +1,73 @@
 # TooCheapFi
 
-**macOS Menu Bar Network Monitor**
+**macOS Menu Bar Network Monitor with Comprehensive Wi-Fi Diagnostics**
 
 Don't want to pay for expensive network diagnostic tools? TooCheapFi is a free macOS menu bar app that continuously monitors your connection and tells you exactly what's wrong and how to fix it.
 
 ## Features
 
-🔍 **Continuous Monitoring**: Runs quietly in your menu bar, constantly checking your connection
+### Multi-Layer Connectivity Testing
+- **Interface Detection**: Identifies Wi-Fi, Ethernet, VPN, and cellular connections
+- **Gateway Reachability**: Tests router connectivity with ICMP and TCP fallback
+- **Internet Connectivity**: Multiple target testing (Google, Cloudflare, OpenDNS)
+- **DNS Resolution**: Tests against multiple domains for reliability
+- **HTTP/Captive Portal**: Detects hotel/airport login pages automatically
 
-📊 **Detailed Diagnostics**: Separates issues into four distinct categories:
-- **Wi-Fi Connection**: Are you connected to a wireless network?
-- **Router Status**: Can you reach your local router/gateway?
-- **ISP/Internet**: Does your ISP provide internet access?
-- **DNS Resolution**: Can you resolve domain names?
+### Wi-Fi Signal Diagnostics
+- **Signal Strength (RSSI)**: Real-time signal quality monitoring
+- **Noise Floor**: Environmental interference measurement
+- **Signal-to-Noise Ratio (SNR)**: True signal quality assessment
+- **Wi-Fi Standard Detection**: 802.11n/ac/ax (Wi-Fi 4/5/6)
+- **Security Analysis**: WPA2/WPA3 security assessment
 
-💡 **Actionable Fixes**: Get specific, step-by-step instructions on how to fix detected issues
+### Channel Analysis
+- **2.4 GHz Scanning**: Analysis of channels 1, 6, and 11
+- **5 GHz Scanning**: Non-DFS channel analysis (36-165)
+- **Congestion Detection**: Identifies overcrowded channels
+- **Recommendations**: Suggests optimal channel changes
 
-⚡ **Real-time Updates**: Status updates automatically when network conditions change
+### Speed Testing
+- **Download Speed**: One-click speed measurement using Cloudflare
+- **Quality Assessment**: Categorizes as Excellent/Good/Fair/Slow
+
+### Notifications
+- **Outage Alerts**: Get notified when internet goes down
+- **Restoration Alerts**: Know when connectivity is restored
+- **Signal Warnings**: Alerts for significant signal drops
+- **Captive Portal Detection**: Prompts for login-required networks
+
+### History & Statistics
+- **Event Logging**: SQLite database tracks connectivity over time
+- **Uptime Tracking**: 24-hour uptime percentage
+- **Outage History**: Duration and cause of each outage
+- **CSV Export**: Export data for ISP disputes or analysis
+
+### User Preferences
+- **Configurable Intervals**: Adjust check frequency
+- **Custom DNS Servers**: Use your preferred DNS targets
+- **Notification Control**: Enable/disable alert types
+- **History Retention**: Configure data retention period
 
 ## Requirements
 
-- macOS 13.0 (Ventura) or later
+- macOS 12.0 (Monterey) or later
 - Swift 5.9 or later
 
 ## Installation
 
-### Build from Source
-
-**Note**: This application requires macOS to build and run. It uses macOS-specific frameworks (Cocoa, SystemConfiguration) that are not available on other platforms.
+### Homebrew (Recommended)
 
 ```bash
-# Clone the repository (on macOS)
+brew tap CrazyDubya/toocheapfi
+brew install toocheapfi
+```
+
+### Build from Source
+
+**Note**: This application requires macOS to build and run.
+
+```bash
+# Clone the repository
 git clone https://github.com/CrazyDubya/TooCheapFi.git
 cd TooCheapFi
 
@@ -41,158 +78,150 @@ make build
 make run
 ```
 
-### Optional: Install System-wide
+### Create App Bundle
+
+```bash
+make app
+open TooCheapFi.app
+```
+
+### Install System-wide
 
 ```bash
 make install
 ```
 
-This installs the binary to `/usr/local/bin/toocheapfi` so you can run it from anywhere.
+This installs the binary to `/usr/local/bin/toocheapfi`.
+
+## Command Line Options
+
+```bash
+toocheapfi --help      # Show help
+toocheapfi --version   # Show version
+toocheapfi             # Launch the menu bar app
+```
 
 ## Usage
 
-1. **Launch the App**: Run `./.build/release/TooCheapFi` or `make run`
-2. **Check the Menu Bar**: Look for the Wi-Fi icon in your menu bar
+1. **Launch the App**: Run the app or use `make run`
+2. **Check the Menu Bar**: Look for the Wi-Fi icon
 3. **Click the Icon**: View detailed connection status
-4. **Follow Suggestions**: If issues are detected, follow the suggested fixes
+4. **Run Speed Test**: Click "Run Speed Test" for bandwidth measurement
+5. **Export Data**: Use Export menu to save CSV reports
 
-### Status Indicators
+### Quality Indicators
 
-- ✅ Green checkmark: Component is working correctly
-- ❌ Red X: Component has issues
-- 🔍 Magnifying glass: Diagnosis information
-- 💡 Light bulb: Suggested fixes
+The menu bar icon and header show overall connection quality:
+- 🟢 **Excellent** (80-100): All systems working optimally
+- 🟡 **Good** (60-79): Minor issues or slight latency
+- 🟠 **Fair** (40-59): Notable issues affecting performance
+- 🔴 **Poor** (1-39): Significant connectivity problems
+- ⚫ **None** (0): No connection
 
 ## How It Works
 
-TooCheapFi performs systematic checks to pinpoint connection issues:
+TooCheapFi performs systematic multi-layer checks:
 
-1. **Wi-Fi Check**: Verifies your device has an active network interface with an IP address
-2. **Router Check**: Pings your default gateway to ensure local network connectivity
-3. **ISP Check**: Attempts to reach external IP addresses (like 8.8.8.8) to verify internet access
-4. **DNS Check**: Tests domain name resolution to ensure DNS is working
+1. **Interface Layer**: Detects active network interface using CoreWLAN
+2. **Wi-Fi Analysis**: Collects RSSI, noise, SNR, channel, security via CoreWLAN
+3. **Gateway Check**: Pings router with ICMP, falls back to TCP if blocked
+4. **Internet Check**: Tests multiple IPs (8.8.8.8, 1.1.1.1, 208.67.222.222)
+5. **DNS Check**: Resolves multiple domains (apple.com, cloudflare.com, microsoft.com)
+6. **HTTP Check**: Fetches Apple's captive portal page to detect login walls
+7. **Channel Scan**: Scans for neighboring networks to assess congestion
+8. **Quality Score**: Calculates 0-100 score based on all factors
 
-By checking each layer independently, TooCheapFi can tell you exactly where the problem is—no more guessing!
+## Configuration
 
-## Example Scenarios
+Preferences are stored in `~/Library/Application Support/TooCheapFi/config.json`:
 
-### Scenario 1: Router is Off
-```
-✅ Wi-Fi: Connected (192.168.1.100)
-❌ Router: Unreachable (192.168.1.1)
-❌ ISP/Internet: No Internet
-❌ DNS: Failed
-
-Diagnosis: Connected to Wi-Fi but router is unreachable
-
-Suggested Fixes:
-1. Check if router is powered on
-2. Verify router lights indicate normal operation
-3. Try restarting your router (unplug for 30 sec)
-4. Check Ethernet cable connections
-```
-
-### Scenario 2: ISP Outage
-```
-✅ Wi-Fi: Connected (192.168.1.100)
-✅ Router: Reachable (192.168.1.1)
-❌ ISP/Internet: No Internet
-❌ DNS: Failed
-
-Diagnosis: Router works but no internet from ISP
-
-Suggested Fixes:
-1. Restart your modem (unplug for 30 sec)
-2. Check if other devices have internet
-3. Contact your ISP to check for outages
-4. Check if your ISP bill is paid
+```json
+{
+  "checkIntervalSeconds": 5,
+  "pingTimeoutSeconds": 2,
+  "ispTestTargets": ["8.8.8.8", "1.1.1.1", "208.67.222.222"],
+  "dnsTestDomains": ["apple.com", "cloudflare.com", "microsoft.com"],
+  "notificationsEnabled": true,
+  "historyEnabled": true,
+  "historyRetentionDays": 30,
+  "speedTestSizeMB": 10
+}
 ```
 
-### Scenario 3: DNS Issues
-```
-✅ Wi-Fi: Connected (192.168.1.100)
-✅ Router: Reachable (192.168.1.1)
-✅ ISP/Internet: Connected
-❌ DNS: Failed
+Access via menu: **Settings > Open Config File...**
 
-Diagnosis: Internet works but DNS resolution is failing
+## Data Storage
 
-Suggested Fixes:
-1. Try using Google DNS (8.8.8.8, 8.8.4.4)
-2. Open System Settings > Network > Advanced
-3. Go to DNS tab and add 8.8.8.8
-4. Restart your computer
-```
+History is stored in `~/Library/Application Support/TooCheapFi/history.db`:
 
-## Development
+- **events**: Timestamped connectivity snapshots
+- **outages**: Start/end times, duration, affected layer
+- **speed_tests**: Speed test results over time
 
-### Project Structure
+Export via menu: **Export Data > Export History to CSV...**
+
+## Project Structure
 
 ```
 TooCheapFi/
-├── Package.swift           # Swift Package Manager configuration
-├── Makefile               # Build automation
+├── Package.swift              # Swift Package Manager configuration
+├── Makefile                   # Build automation
+├── Formula/
+│   └── toocheapfi.rb          # Homebrew formula
 ├── Sources/
-│   ├── main.swift         # App entry point and menu bar UI
+│   ├── main.swift             # App entry point and menu bar UI
 │   ├── NetworkMonitor.swift   # Network diagnostics logic
-│   └── NetworkStatus.swift    # Status data model
-└── README.md
-```
-
-### Building
-
-```bash
-# Debug build
-swift build
-
-# Release build
-swift build -c release
-
-# Clean build artifacts
-make clean
+│   ├── NetworkStatus.swift    # Status data models
+│   ├── NotificationManager.swift  # macOS notifications
+│   ├── Preferences.swift      # User configuration
+│   └── HistoryStore.swift     # SQLite history logging
+├── .github/
+│   └── workflows/
+│       └── ci.yml             # GitHub Actions CI
+└── docs/
+    ├── PLANNING.md            # Strategic vision
+    ├── PHASE1-TECHNICAL-SPEC.md
+    ├── LOGIC-ANALYSIS.md      # Network checking analysis
+    └── WIFI-DIAGNOSTICS-ANALYSIS.md
 ```
 
 ## Troubleshooting
 
 ### App won't launch
-- Ensure you have macOS 13+ installed
-- Check that Swift 5.9+ is available: `swift --version`
-- Try rebuilding: `make clean && make build`
+- Ensure macOS 12+ is installed
+- Check Swift 5.9+: `swift --version`
+- Rebuild: `make clean && make build`
 
-### Incorrect status shown
-- Click "Refresh Status" in the menu
-- Check System Settings > Network for actual network configuration
-- The app checks every 5 seconds automatically
+### No Wi-Fi diagnostics
+- Grant Location Services permission when prompted
+- Check System Settings > Privacy & Security > Location Services
+
+### Channel analysis empty
+- Location Services required for Wi-Fi scanning
+- Some enterprise networks block scanning
 
 ### Permission issues
-- The app requires network access permissions
-- macOS may prompt you to allow network access on first run
+- macOS may prompt for network access on first run
+- Grant permission in System Settings > Privacy & Security
 
-## Roadmap
+## Version History
 
-TooCheapFi is evolving from a simple monitor into a comprehensive network diagnostic tool. See our [Planning Document](PLANNING.md) for the full vision.
+### v1.0.0 (Current)
+- Multi-layer connectivity testing with fallbacks
+- Comprehensive Wi-Fi diagnostics (RSSI, SNR, channel)
+- 2.4 GHz and 5 GHz channel analysis
+- Captive portal detection
+- Speed testing via Cloudflare
+- macOS notifications for outages
+- SQLite history logging
+- CSV export functionality
+- User preferences system
+- Homebrew formula
 
-### Current Status: v0.1 (Prototype)
-
-Working features:
-- [x] Four-layer connectivity diagnostics
-- [x] Menu bar integration
-- [x] Actionable fix suggestions
-- [x] Auto-refresh on network changes
-
-### Coming in v1.0
-
-- [ ] **Homebrew installation**: `brew install toocheapfi`
-- [ ] **User preferences**: Customize check intervals, DNS servers
-- [ ] **Outage history**: Track connectivity over time
-- [ ] **Notifications**: Get alerted when connection drops/restores
-- [ ] **ISP reports**: Export outage history to prove issues to your ISP
-
-### Future Plans
-
-- [ ] **Cross-platform**: Linux and Windows support (Rust core)
-- [ ] **Latency tracking**: Monitor network quality over time
-- [ ] **Advanced diagnostics**: Bandwidth testing, traceroute
+### v0.1.0 (Prototype)
+- Basic four-layer connectivity checks
+- Menu bar integration
+- Simple fix suggestions
 
 ## Contributing
 
@@ -201,8 +230,8 @@ Contributions are welcome! Please feel free to submit issues or pull requests.
 ### Development Documentation
 
 - [PLANNING.md](PLANNING.md) - Strategic vision and roadmap
-- [docs/PHASE1-TECHNICAL-SPEC.md](docs/PHASE1-TECHNICAL-SPEC.md) - Technical specifications
-- [docs/ACTION-ITEMS.md](docs/ACTION-ITEMS.md) - Prioritized task list
+- [docs/LOGIC-ANALYSIS.md](docs/LOGIC-ANALYSIS.md) - Network checking logic analysis
+- [docs/WIFI-DIAGNOSTICS-ANALYSIS.md](docs/WIFI-DIAGNOSTICS-ANALYSIS.md) - Wi-Fi diagnostics design
 - [BUILDING.md](BUILDING.md) - Build instructions
 - [UI-GUIDE.md](UI-GUIDE.md) - UI documentation
 
