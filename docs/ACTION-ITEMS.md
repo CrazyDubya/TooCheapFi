@@ -4,6 +4,46 @@
 
 ---
 
+## Priority 0: Fix Core Logic (BEFORE adding features!)
+
+> See [LOGIC-ANALYSIS.md](LOGIC-ANALYSIS.md) and [WIFI-DIAGNOSTICS-ANALYSIS.md](WIFI-DIAGNOSTICS-ANALYSIS.md) for details
+
+### 0.1 Fix Single Points of Failure
+**Effort**: 2 hours | **Impact**: CRITICAL - prevents false "No Internet" in China/corporate
+
+- [ ] Add multiple ISP test targets (8.8.8.8, 1.1.1.1, 208.67.222.222)
+- [ ] Add multiple DNS test domains (not just google.com)
+- [ ] Add TCP fallback when ICMP ping blocked (router check)
+- [ ] Add HTTP connectivity test (captive portal detection)
+
+### 0.2 Add Wi-Fi Quality Metrics
+**Effort**: 3-4 hours | **Impact**: HIGH - answers "why is my WiFi slow?"
+
+- [ ] Add signal strength (RSSI) using CoreWLAN
+- [ ] Add noise level measurement
+- [ ] Calculate Signal-to-Noise Ratio (SNR)
+- [ ] Show transmit rate (actual speed)
+- [ ] Detect Wi-Fi standard (802.11n/ac/ax)
+- [ ] Display current channel and band
+
+### 0.3 Add Channel Analysis
+**Effort**: 4-5 hours | **Impact**: HIGH - helps users optimize WiFi
+
+- [ ] Scan for neighboring networks
+- [ ] Count networks per channel
+- [ ] Detect adjacent-channel interference
+- [ ] Recommend best channel (1, 6, or 11 for 2.4GHz)
+- [ ] Suggest switching to 5GHz when appropriate
+
+### 0.4 Fix Interface Detection
+**Effort**: 1 hour | **Impact**: MEDIUM - correct "Wi-Fi" vs "Ethernet" label
+
+- [ ] Use CoreWLAN to detect actual interface type
+- [ ] Distinguish Wi-Fi from Ethernet from USB tethering
+- [ ] Show correct interface name in UI
+
+---
+
 ## Priority 1: Critical Path (Required for v1.0)
 
 ### 1.1 Add Version Flag Support
@@ -172,11 +212,21 @@
 
 | Priority | Items | Estimated Hours |
 |----------|-------|-----------------|
+| **P0 (Fix Core Logic)** | **4 items** | **10-14 hours** |
 | P1 (Critical) | 4 items | 6-8 hours |
 | P2 (Value) | 3 items | 8-11 hours |
 | P3 (Polish) | 3 items | 5-8 hours |
 | P4 (Future) | 3 items | 6-9 hours |
-| **Total** | **13 items** | **25-36 hours** |
+| **Total** | **17 items** | **35-50 hours** |
+
+### Recommended Order
+1. **P0.1** - Fix false negatives (broken trust = dead product)
+2. **P0.4** - Fix interface detection (quick win)
+3. **P0.2** - Add Wi-Fi quality (biggest user value)
+4. P1.1 - Version flags (enables distribution)
+5. **P0.3** - Channel analysis (differentiation)
+6. P1.2-P1.4 - CI, tests, Homebrew
+7. P2+ - Features
 
 ---
 
