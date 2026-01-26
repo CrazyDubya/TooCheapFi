@@ -84,7 +84,7 @@ final class EventHookManager {
         // Check for signal drops
         if let oldRSSI = oldStatus?.wifiInfo?.rssi,
            let newRSSI = newStatus.wifiInfo?.rssi,
-           newRSSI < oldRSSI - 10 {  // 10 dB drop threshold
+           newRSSI < oldRSSI - AppConstants.signalDropThreshold {
             notifySignalDrop(from: oldRSSI, to: newRSSI)
         }
     }
@@ -154,10 +154,14 @@ final class ScriptHookRunner: NetworkEventObserver {
         scriptsPath = Preferences.configDirectory.appendingPathComponent("hooks")
 
         // Create hooks directory if needed
-        try? FileManager.default.createDirectory(
-            at: scriptsPath,
-            withIntermediateDirectories: true
-        )
+        do {
+            try FileManager.default.createDirectory(
+                at: scriptsPath,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            logError("Failed to create hooks directory: \(error)")
+        }
 
         // Register as observer
         EventHookManager.shared.addObserver(self)
@@ -207,7 +211,7 @@ final class ScriptHookRunner: NetworkEventObserver {
             // Set environment variables
             var env = ProcessInfo.processInfo.environment
             env["TOOCHEAPFI_HOOK"] = name
-            env["TOOCHEAPFI_VERSION"] = "1.2.0"
+            env["TOOCHEAPFI_VERSION"] = AppConstants.version
             task.environment = env
 
             do {

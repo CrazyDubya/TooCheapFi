@@ -17,13 +17,20 @@ jobs:
       - name: Install SwiftLint
         run: brew install swiftlint
 
-      - name: Run SwiftLint
-        run: swiftlint lint --strict --reporter github-actions-logging
+      - name: Lint Sources
+        run: swiftlint lint Sources/ --strict --reporter github-actions-logging
+
+      - name: Lint Tests
+        run: swiftlint lint Tests/ --strict --reporter github-actions-logging
 
   build:
     name: Build & Test
     needs: lint
-    runs-on: macos-14
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-13, macos-14]
+      fail-fast: false
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -39,9 +46,29 @@ jobs:
       - name: Build (Release)
         run: swift build -c release
 
-      - name: Run Tests
-        run: swift test
-        continue-on-error: true  # Tests are new, don't fail build yet
+      - name: Run Tests with Coverage
+        run: swift test --enable-code-coverage
+
+      - name: Generate Coverage Report
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          XCTEST_PATH=$(find .build -name "*.xctest" -type d | head -1)
+          if [ -n "$XCTEST_PATH" ]; then
+            EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$(basename $XCTEST_PATH .xctest)"
+            xcrun llvm-cov export "$EXEC_PATH" \
+              -instr-profile .build/debug/codecov/default.profdata \
+              -format="lcov" > coverage.lcov 2>/dev/null || echo "Coverage export failed, skipping"
+          fi
+
+      - name: Check Binary Size
+        run: |
+          SIZE=$(stat -f%z .build/release/TooCheapFi 2>/dev/null || stat --printf="%s" .build/release/TooCheapFi 2>/dev/null)
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Binary size: ${SIZE_MB}MB (${SIZE} bytes)"
+          if [ $SIZE -gt 52428800 ]; then
+            echo "::error::Binary exceeds 50MB limit"
+            exit 1
+          fi
 
       - name: Check Version Flag
         run: .build/release/TooCheapFi --version
@@ -51,9 +78,18 @@ jobs:
 
       - name: Archive Release Binary
         uses: actions/upload-artifact@v4
+        if: matrix.os == 'macos-14'
         with:
           name: TooCheapFi-macos
           path: .build/release/TooCheapFi
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.os == 'macos-14'
+        with:
+          files: coverage.lcov
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
 
   release:
     name: Release

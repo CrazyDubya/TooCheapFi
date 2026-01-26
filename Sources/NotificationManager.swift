@@ -19,7 +19,7 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
             DispatchQueue.main.async {
                 if let error = error {
-                    print("Notification permission error: \(error)")
+                    logError("Notification permission error: \(error)")
                 }
                 completion(granted)
             }
@@ -157,22 +157,6 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
         )
 
         UNUserNotificationCenter.current().add(request)
-    }
-
-    // MARK: - Helpers
-
-    private func formatDuration(_ seconds: TimeInterval) -> String {
-        let hours = Int(seconds) / 3600
-        let mins = (Int(seconds) % 3600) / 60
-        let secs = Int(seconds) % 60
-
-        if hours > 0 {
-            return "\(hours)h \(mins)m"
-        } else if mins > 0 {
-            return "\(mins)m \(secs)s"
-        } else {
-            return "\(secs)s"
-        }
     }
 
     // MARK: - Settings

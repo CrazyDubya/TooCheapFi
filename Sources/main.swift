@@ -5,9 +5,9 @@ import UniformTypeIdentifiers
 
 @main
 class TooCheapFiApp: NSObject, NSApplicationDelegate {
-    private var statusItem: NSStatusItem!
-    private var menu: NSMenu!
-    private var networkMonitor: NetworkMonitor!
+    private var statusItem: NSStatusItem?
+    private var menu: NSMenu?
+    private var networkMonitor: NetworkMonitor?
 
     private var currentStatus: NetworkStatus {
         networkMonitor?.currentStatus ?? .unknown
@@ -18,7 +18,7 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         let args = CommandLine.arguments
 
         if args.contains("--version") || args.contains("-v") {
-            print("TooCheapFi 1.0.0")
+            print(AppConstants.versionString)
             exit(0)
         }
 
@@ -53,41 +53,45 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Create status bar item
-        statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        let newStatusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
+        statusItem = newStatusItem
 
-        if let button = statusItem.button {
+        if let button = newStatusItem.button {
             button.image = NSImage(systemSymbolName: "wifi.circle", accessibilityDescription: "Network Status")
             button.image?.isTemplate = true
         }
 
         // Create menu
-        menu = NSMenu()
-        statusItem.menu = menu
+        let newMenu = NSMenu()
+        menu = newMenu
+        newStatusItem.menu = newMenu
 
         // Request notification permissions
         NotificationManager.shared.requestPermission { granted in
-            print("Notifications \(granted ? "enabled" : "disabled")")
+            logInfo("Notifications \(granted ? "enabled" : "disabled")")
         }
 
         // Initialize network monitor
-        networkMonitor = NetworkMonitor()
-        networkMonitor.onStatusChange = { [weak self] status in
+        let monitor = NetworkMonitor()
+        networkMonitor = monitor
+        monitor.onStatusChange = { [weak self] status in
             self?.updateMenu(with: status)
         }
 
         // Start monitoring
-        networkMonitor.startMonitoring()
+        monitor.startMonitoring()
 
         // Initial menu update
-        updateMenu(with: networkMonitor.currentStatus)
+        updateMenu(with: monitor.currentStatus)
     }
 
     func updateMenu(with status: NetworkStatus) {
+        guard let menu = menu else { return }
         menu.removeAllItems()
 
         // Header with quality score
-        let qualityEmoji = qualityEmoji(for: status.overallQuality)
-        let headerTitle = "TooCheapFi - \(qualityEmoji) \(status.overallQuality.rawValue) (\(status.qualityScore)/100)"
+        let emoji = qualityEmoji(for: status.overallQuality)
+        let headerTitle = "\(AppConstants.appName) - \(emoji) \(status.overallQuality.rawValue) (\(status.qualityScore)/100)"
         let headerItem = NSMenuItem(title: headerTitle, action: nil, keyEquivalent: "")
         headerItem.isEnabled = false
         menu.addItem(headerItem)
@@ -400,29 +404,8 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         return item
     }
 
-    private func qualityEmoji(for quality: ConnectionQuality) -> String {
-        switch quality {
-        case .excellent: return "🟢"
-        case .good: return "🟡"
-        case .fair: return "🟠"
-        case .poor: return "🔴"
-        case .none: return "⚫"
-        }
-    }
-
-    private func signalEmoji(for quality: SignalQuality) -> String {
-        switch quality {
-        case .excellent: return "📶"
-        case .good: return "📶"
-        case .fair: return "📶"
-        case .weak: return "📉"
-        case .veryWeak: return "📉"
-        case .none: return "❌"
-        }
-    }
-
     private func updateStatusBarIcon(for status: NetworkStatus) {
-        guard let button = statusItem.button else { return }
+        guard let button = statusItem?.button else { return }
 
         let iconName: String
         switch status.overallQuality {
@@ -441,13 +424,13 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
     }
 
     @objc func refreshStatus() {
-        networkMonitor.checkStatus()
+        networkMonitor?.checkStatus()
     }
 
     @objc func runSpeedTest() {
-        networkMonitor.runSpeedTest { [weak self] result in
+        networkMonitor?.runSpeedTest { [weak self] result in
             // Menu will be updated automatically via onStatusChange
-            print("Speed test completed: \(result.downloadSpeedDescription)")
+            logInfo("Speed test completed: \(result.downloadSpeedDescription)")
         }
     }
 
@@ -499,27 +482,13 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         do {
             try prefs.update { $0.historyEnabled.toggle() }
         } catch {
-            print("Failed to save preferences: \(error)")
+            logError("Failed to save preferences: \(error)")
         }
         updateMenu(with: currentStatus)
     }
 
     @objc func openConfig() {
         Preferences.openConfigInFinder()
-    }
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let hours = seconds / 3600
-        let mins = (seconds % 3600) / 60
-        let secs = seconds % 60
-
-        if hours > 0 {
-            return "\(hours)h \(mins)m"
-        } else if mins > 0 {
-            return "\(mins)m \(secs)s"
-        } else {
-            return "\(secs)s"
-        }
     }
 
     @objc func quitApp() {

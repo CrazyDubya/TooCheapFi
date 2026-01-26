@@ -249,6 +249,8 @@ TooCheapFi/
 │   └── toocheapfi.rb             # Homebrew formula
 ├── Sources/
 │   ├── main.swift                # App entry point and menu bar UI
+│   ├── AppConstants.swift        # Centralized app constants (v1.3)
+│   ├── Utilities.swift           # Shared utility functions (v1.3)
 │   ├── NetworkMonitor.swift      # Main monitoring coordinator
 │   ├── NetworkStatus.swift       # Status data models
 │   ├── NetworkUtilities.swift    # Low-level ping/TCP/DNS utilities
@@ -267,7 +269,11 @@ TooCheapFi/
 │   ├── SignalQualityTests.swift
 │   ├── EventHooksTests.swift
 │   ├── HistoryStoreTests.swift
-│   └── ConnectivityCheckerTests.swift
+│   ├── ConnectivityCheckerTests.swift
+│   ├── WiFiAnalyzerTests.swift   # WiFi analysis tests (v1.3)
+│   ├── UtilitiesTests.swift      # Shared utilities tests (v1.3)
+│   ├── AppConstantsTests.swift   # Constants tests (v1.3)
+│   └── LoggerTests.swift         # Logger tests (v1.3)
 ├── .github/
 │   └── workflows/
 │       └── ci.yml                # GitHub Actions (lint, test, build, release)
@@ -300,7 +306,17 @@ TooCheapFi/
 
 ## Version History
 
-### v1.2.0 (Current)
+### v1.3.0 (Current)
+- **Stability**: Eliminated Implicitly Unwrapped Optionals (IUOs) in main.swift
+- **Centralized Constants**: `AppConstants.swift` with single source for version, URLs, thresholds
+- **Shared Utilities**: `Utilities.swift` with consolidated formatting functions
+- **Enhanced Linting**: IUO detection, stricter thresholds, force cast warnings
+- **CI/CD Hardening**: Removed test skip flag, added code coverage, macOS 13/14 matrix
+- **Test Coverage**: Added tests for WiFiAnalyzer, Utilities, AppConstants, Logger
+- **Error Handling**: Proper logging for database and file operations
+- **Code Quality**: Print statements migrated to Logger
+
+### v1.2.0
 - **Security**: Fixed SQL injection vulnerabilities with parameterized queries
 - **Stability**: Eliminated force unwraps throughout codebase
 - **Thread Safety**: Added `ThreadSafe` property wrapper and database queue

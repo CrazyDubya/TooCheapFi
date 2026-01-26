@@ -119,20 +119,29 @@ class HistoryStore {
             guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
             defer { sqlite3_finalize(stmt) }
 
-            sqlite3_bind_text(stmt, 1, status.interfaceType.rawValue, -1, nil)
-            sqlite3_bind_int(stmt, 2, status.wifiConnected ? 1 : 0)
-            sqlite3_bind_int(stmt, 3, status.gatewayReachable ? 1 : 0)
-            sqlite3_bind_int(stmt, 4, status.internetReachable ? 1 : 0)
-            sqlite3_bind_int(stmt, 5, status.dnsWorking ? 1 : 0)
-            sqlite3_bind_int(stmt, 6, status.httpWorking ? 1 : 0)
-            sqlite3_bind_int(stmt, 7, status.captivePortalDetected ? 1 : 0)
-            sqlite3_bind_int(stmt, 8, Int32(status.wifiInfo?.rssi ?? 0))
-            sqlite3_bind_int(stmt, 9, Int32(status.wifiInfo?.snr ?? 0))
-            sqlite3_bind_double(stmt, 10, status.internetLatency ?? 0)
-            sqlite3_bind_int(stmt, 11, Int32(status.qualityScore))
-            sqlite3_bind_text(stmt, 12, errorLayer, -1, nil)
+            var bindResult = SQLITE_OK
+            bindResult = sqlite3_bind_text(stmt, 1, status.interfaceType.rawValue, -1, nil)
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 2, status.wifiConnected ? 1 : 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 3, status.gatewayReachable ? 1 : 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 4, status.internetReachable ? 1 : 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 5, status.dnsWorking ? 1 : 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 6, status.httpWorking ? 1 : 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 7, status.captivePortalDetected ? 1 : 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 8, Int32(status.wifiInfo?.rssi ?? 0)) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 9, Int32(status.wifiInfo?.snr ?? 0)) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_double(stmt, 10, status.internetLatency ?? 0) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_int(stmt, 11, Int32(status.qualityScore)) : bindResult
+            bindResult = bindResult == SQLITE_OK ? sqlite3_bind_text(stmt, 12, errorLayer, -1, nil) : bindResult
 
-            sqlite3_step(stmt)
+            if bindResult != SQLITE_OK {
+                logError("Failed to bind parameters for recordStatus: \(bindResult)")
+                return
+            }
+
+            let stepResult = sqlite3_step(stmt)
+            if stepResult != SQLITE_DONE {
+                logError("Failed to execute recordStatus: \(stepResult)")
+            }
 
             // Track outages
             self.handleOutageTracking(status, errorLayer: errorLayer)

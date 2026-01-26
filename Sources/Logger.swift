@@ -97,16 +97,25 @@ final class Logger {
 
         // Create file if needed
         if !FileManager.default.fileExists(atPath: logPath.path) {
-            FileManager.default.createFile(atPath: logPath.path, contents: nil)
+            let created = FileManager.default.createFile(atPath: logPath.path, contents: nil)
+            if !created {
+                // Can't use logError here since we're setting up logging
+                os_log("Failed to create log file at %{public}@", log: osLog, type: .error, logPath.path)
+                return
+            }
         }
 
-        logFileHandle = try? FileHandle(forWritingTo: logPath)
-        logFileHandle?.seekToEndOfFile()
+        do {
+            logFileHandle = try FileHandle(forWritingTo: logPath)
+            logFileHandle?.seekToEndOfFile()
 
-        // Write startup marker
-        let startMessage = "\n\n=== TooCheapFi Started at \(dateFormatter.string(from: Date())) ===\n"
-        if let data = startMessage.data(using: .utf8) {
-            logFileHandle?.write(data)
+            // Write startup marker
+            let startMessage = "\n\n=== TooCheapFi Started at \(dateFormatter.string(from: Date())) ===\n"
+            if let data = startMessage.data(using: .utf8) {
+                logFileHandle?.write(data)
+            }
+        } catch {
+            os_log("Failed to open log file for writing: %{public}@", log: osLog, type: .error, error.localizedDescription)
         }
         #endif
     }

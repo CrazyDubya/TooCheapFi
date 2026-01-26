@@ -68,10 +68,14 @@ struct Preferences: Codable {
         let appSupport = appSupportBase.appendingPathComponent("TooCheapFi")
 
         // Create directory if needed
-        try? FileManager.default.createDirectory(
-            at: appSupport,
-            withIntermediateDirectories: true
-        )
+        do {
+            try FileManager.default.createDirectory(
+                at: appSupport,
+                withIntermediateDirectories: true
+            )
+        } catch {
+            logError("Failed to create config directory: \(error)")
+        }
 
         return appSupport
     }
@@ -87,16 +91,30 @@ struct Preferences: Codable {
     // MARK: - Load/Save
 
     static func load() -> Preferences {
-        guard FileManager.default.fileExists(atPath: configPath.path),
-              let data = try? Data(contentsOf: configPath),
-              let prefs = try? JSONDecoder().decode(Preferences.self, from: data)
-        else {
-            // Return defaults and save them
+        guard FileManager.default.fileExists(atPath: configPath.path) else {
+            // Config file doesn't exist, create defaults
             let defaults = Preferences()
-            try? defaults.save()
+            do {
+                try defaults.save()
+            } catch {
+                logError("Failed to save default preferences: \(error)")
+            }
             return defaults
         }
-        return prefs
+
+        do {
+            let data = try Data(contentsOf: configPath)
+            return try JSONDecoder().decode(Preferences.self, from: data)
+        } catch {
+            logError("Failed to load preferences, using defaults: \(error)")
+            let defaults = Preferences()
+            do {
+                try defaults.save()
+            } catch {
+                logError("Failed to save default preferences: \(error)")
+            }
+            return defaults
+        }
     }
 
     func save() throws {
