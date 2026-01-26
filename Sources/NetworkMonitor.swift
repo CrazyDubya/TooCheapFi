@@ -6,6 +6,7 @@ import CoreWLAN
 class NetworkMonitor {
     var onStatusChange: ((NetworkStatus) -> Void)?
     private(set) var currentStatus: NetworkStatus = .unknown
+    private var previousStatus: NetworkStatus?
     private var timer: Timer?
     private let pathMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.toocheapfi.networkmonitor")
@@ -16,6 +17,14 @@ class NetworkMonitor {
     private let captivePortalURL = "http://captive.apple.com/hotspot-detect.html"
     private let pingTimeout: TimeInterval = 2.0
     private let httpTimeout: TimeInterval = 5.0
+
+    // Speed test configuration
+    private let speedTestURL = "https://speed.cloudflare.com/__down?bytes=10000000"  // 10MB test file
+    private var lastSpeedTest: SpeedTestResult = .notRun
+    private var speedTestInProgress = false
+
+    // 5 GHz preferred channels (non-DFS)
+    private let preferred5GHzChannels = [36, 40, 44, 48, 149, 153, 157, 161, 165]
 
     func startMonitoring() {
         // Initial check
@@ -85,11 +94,16 @@ class NetworkMonitor {
 
             // Wi-Fi channel analysis (if on Wi-Fi)
             if interfaceType == .wifi {
-                let (neighbors, analysis, recommended) = self.analyzeChannels()
+                let (neighbors, analysis2GHz, recommended2GHz, analysis5GHz, recommended5GHz) = self.analyzeChannels()
                 status.neighboringNetworks = neighbors
-                status.channelAnalysis = analysis
-                status.recommendedChannel = recommended
+                status.channelAnalysis = analysis2GHz
+                status.recommendedChannel = recommended2GHz
+                status.channelAnalysis5GHz = analysis5GHz
+                status.recommendedChannel5GHz = recommended5GHz
             }
+
+            // Include last speed test result
+            status.speedTest = self.lastSpeedTest
 
             // Generate issues and recommendations
             let (issues, recommendations) = self.analyzeStatus(status)
@@ -101,10 +115,98 @@ class NetworkMonitor {
             status.overallQuality = self.qualityFromScore(status.qualityScore)
 
             DispatchQueue.main.async {
+                // Trigger notifications for status changes
+                NotificationManager.shared.handleStatusChange(from: self.previousStatus, to: status)
+
+                self.previousStatus = self.currentStatus
                 self.currentStatus = status
                 self.onStatusChange?(status)
             }
         }
+    }
+
+    // MARK: - Speed Test
+
+    func runSpeedTest(completion: @escaping (SpeedTestResult) -> Void) {
+        guard !speedTestInProgress else {
+            completion(lastSpeedTest)
+            return
+        }
+
+        speedTestInProgress = true
+        lastSpeedTest = SpeedTestResult(
+            downloadSpeed: nil,
+            uploadSpeed: nil,
+            testTime: Date(),
+            testServer: "Cloudflare",
+            status: .running
+        )
+
+        // Notify UI that test is starting
+        DispatchQueue.main.async {
+            var status = self.currentStatus
+            status.speedTest = self.lastSpeedTest
+            self.onStatusChange?(status)
+        }
+
+        guard let url = URL(string: speedTestURL) else {
+            lastSpeedTest.status = .failed
+            speedTestInProgress = false
+            completion(lastSpeedTest)
+            return
+        }
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 30
+
+        let session = URLSession(configuration: config)
+
+        session.dataTask(with: url) { [weak self] data, response, error in
+            guard let self = self else { return }
+
+            defer {
+                self.speedTestInProgress = false
+                session.invalidateAndCancel()
+            }
+
+            if let error = error {
+                print("Speed test error: \(error)")
+                self.lastSpeedTest.status = .failed
+                completion(self.lastSpeedTest)
+                return
+            }
+
+            guard let data = data else {
+                self.lastSpeedTest.status = .failed
+                completion(self.lastSpeedTest)
+                return
+            }
+
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let bytesDownloaded = Double(data.count)
+            let megabits = (bytesDownloaded * 8) / 1_000_000
+            let speedMbps = megabits / elapsed
+
+            self.lastSpeedTest = SpeedTestResult(
+                downloadSpeed: speedMbps,
+                uploadSpeed: nil,
+                testTime: Date(),
+                testServer: "Cloudflare",
+                status: .completed
+            )
+
+            DispatchQueue.main.async {
+                var status = self.currentStatus
+                status.speedTest = self.lastSpeedTest
+                self.currentStatus = status
+                self.onStatusChange?(status)
+            }
+
+            completion(self.lastSpeedTest)
+        }.resume()
     }
 
     // MARK: - Layer 1: Interface Detection
@@ -435,9 +537,9 @@ class NetworkMonitor {
 
     // MARK: - Channel Analysis
 
-    private func analyzeChannels() -> ([NeighboringNetwork], [ChannelAnalysis], Int?) {
+    private func analyzeChannels() -> ([NeighboringNetwork], [ChannelAnalysis], Int?, [ChannelAnalysis], Int?) {
         guard let interface = CWWiFiClient.shared().interface() else {
-            return ([], [], nil)
+            return ([], [], nil, [], nil)
         }
 
         var neighbors: [NeighboringNetwork] = []
@@ -460,9 +562,7 @@ class NetworkMonitor {
                     }
                 }
 
-                var security = "Unknown"
-                // Note: CWNetwork doesn't expose security directly in newer APIs
-                // We'll mark as "Unknown" for now
+                let security = "Unknown"
 
                 neighbors.append(NeighboringNetwork(
                     ssid: network.ssid ?? "(Hidden)",
@@ -475,18 +575,17 @@ class NetworkMonitor {
             }
         } catch {
             // Scan failed - return empty
-            return ([], [], nil)
+            return ([], [], nil, [], nil)
         }
 
-        // Analyze channels (for 2.4 GHz only - channels 1, 6, 11)
         let currentChannel = interface.wlanChannel()?.channelNumber ?? 0
         let currentBand = interface.wlanChannel()?.channelBand
 
-        var analysis: [ChannelAnalysis] = []
-        var recommendedChannel: Int?
-        var lowestCongestion = Int.max
+        // ============ 2.4 GHz Analysis ============
+        var analysis2GHz: [ChannelAnalysis] = []
+        var recommended2GHz: Int?
+        var lowestCongestion2GHz = Int.max
 
-        // Analyze 2.4 GHz channels 1, 6, 11
         for channel in [1, 6, 11] {
             let onChannel = neighbors.filter {
                 $0.channel == channel && $0.channelBand == "2.4 GHz"
@@ -499,9 +598,9 @@ class NetworkMonitor {
             }
 
             let strongest = onChannel.map { $0.rssi }.max() ?? -100
+            let totalInterference = onChannel.count + adjacent.count
 
             let congestion: String
-            let totalInterference = onChannel.count + adjacent.count
             if totalInterference == 0 {
                 congestion = "None"
             } else if totalInterference <= 3 {
@@ -512,29 +611,80 @@ class NetworkMonitor {
                 congestion = "High"
             }
 
-            let isRecommended = totalInterference < lowestCongestion
-            if isRecommended && currentBand == .band2GHz {
-                lowestCongestion = totalInterference
-                recommendedChannel = channel
+            if totalInterference < lowestCongestion2GHz {
+                lowestCongestion2GHz = totalInterference
+                recommended2GHz = channel
             }
 
-            analysis.append(ChannelAnalysis(
+            analysis2GHz.append(ChannelAnalysis(
                 channel: channel,
                 band: "2.4 GHz",
                 networksOnChannel: onChannel.count,
                 networksOnAdjacentChannels: adjacent.count,
                 strongestCompetitorRSSI: strongest,
                 congestionLevel: congestion,
-                isRecommended: channel == recommendedChannel
+                isRecommended: false  // Will update below
             ))
         }
 
-        // If current channel is already the best, no recommendation needed
-        if currentChannel == recommendedChannel {
-            recommendedChannel = nil
+        // Mark recommended 2.4 GHz channel
+        if currentBand == .band2GHz && currentChannel == recommended2GHz {
+            recommended2GHz = nil  // Already on best channel
+        }
+        for i in 0..<analysis2GHz.count {
+            analysis2GHz[i].isRecommended = (analysis2GHz[i].channel == recommended2GHz)
         }
 
-        return (neighbors, analysis, recommendedChannel)
+        // ============ 5 GHz Analysis ============
+        var analysis5GHz: [ChannelAnalysis] = []
+        var recommended5GHz: Int?
+        var lowestCongestion5GHz = Int.max
+
+        // Analyze preferred 5 GHz channels (non-DFS)
+        for channel in preferred5GHzChannels {
+            let onChannel = neighbors.filter {
+                $0.channel == channel && $0.channelBand == "5 GHz"
+            }
+
+            // 5 GHz channels don't overlap like 2.4 GHz, so no adjacent interference
+            let strongest = onChannel.map { $0.rssi }.max() ?? -100
+
+            let congestion: String
+            if onChannel.count == 0 {
+                congestion = "None"
+            } else if onChannel.count <= 2 {
+                congestion = "Low"
+            } else if onChannel.count <= 5 {
+                congestion = "Medium"
+            } else {
+                congestion = "High"
+            }
+
+            if onChannel.count < lowestCongestion5GHz {
+                lowestCongestion5GHz = onChannel.count
+                recommended5GHz = channel
+            }
+
+            analysis5GHz.append(ChannelAnalysis(
+                channel: channel,
+                band: "5 GHz",
+                networksOnChannel: onChannel.count,
+                networksOnAdjacentChannels: 0,  // No overlap on 5 GHz
+                strongestCompetitorRSSI: strongest,
+                congestionLevel: congestion,
+                isRecommended: false
+            ))
+        }
+
+        // Mark recommended 5 GHz channel
+        if currentBand == .band5GHz && currentChannel == recommended5GHz {
+            recommended5GHz = nil  // Already on best channel
+        }
+        for i in 0..<analysis5GHz.count {
+            analysis5GHz[i].isRecommended = (analysis5GHz[i].channel == recommended5GHz)
+        }
+
+        return (neighbors, analysis2GHz, recommended2GHz, analysis5GHz, recommended5GHz)
     }
 
     // MARK: - Issue Analysis

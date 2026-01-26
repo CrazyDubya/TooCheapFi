@@ -151,6 +151,49 @@ struct NetworkRecommendation {
     var category: IssueCategory
 }
 
+// MARK: - Speed Test Result
+
+struct SpeedTestResult {
+    var downloadSpeed: Double?       // Mbps
+    var uploadSpeed: Double?         // Mbps (future)
+    var testTime: Date
+    var testServer: String
+    var status: SpeedTestStatus
+
+    enum SpeedTestStatus: String {
+        case notRun = "Not Run"
+        case running = "Testing..."
+        case completed = "Completed"
+        case failed = "Failed"
+    }
+
+    var downloadSpeedDescription: String {
+        guard let speed = downloadSpeed else { return "N/A" }
+        if speed >= 100 {
+            return String(format: "%.0f Mbps", speed)
+        } else if speed >= 10 {
+            return String(format: "%.1f Mbps", speed)
+        } else {
+            return String(format: "%.2f Mbps", speed)
+        }
+    }
+
+    var speedQuality: String {
+        guard let speed = downloadSpeed else { return "Unknown" }
+        switch speed {
+        case 100...: return "Excellent"
+        case 50..<100: return "Good"
+        case 25..<50: return "Fair"
+        case 10..<25: return "Slow"
+        default: return "Very Slow"
+        }
+    }
+
+    static var notRun: SpeedTestResult {
+        SpeedTestResult(downloadSpeed: nil, uploadSpeed: nil, testTime: Date(), testServer: "", status: .notRun)
+    }
+}
+
 // MARK: - Main Network Status
 
 struct NetworkStatus {
@@ -184,10 +227,15 @@ struct NetworkStatus {
     var captivePortalDetected: Bool
     var captivePortalURL: String?
 
+    // Speed Test
+    var speedTest: SpeedTestResult
+
     // Channel Analysis (only if Wi-Fi)
     var neighboringNetworks: [NeighboringNetwork]
-    var channelAnalysis: [ChannelAnalysis]
+    var channelAnalysis: [ChannelAnalysis]        // 2.4 GHz
+    var channelAnalysis5GHz: [ChannelAnalysis]    // 5 GHz
     var recommendedChannel: Int?
+    var recommendedChannel5GHz: Int?
 
     // Overall Assessment
     var overallQuality: ConnectionQuality
@@ -278,9 +326,12 @@ struct NetworkStatus {
             httpWorking: false,
             captivePortalDetected: false,
             captivePortalURL: nil,
+            speedTest: .notRun,
             neighboringNetworks: [],
             channelAnalysis: [],
+            channelAnalysis5GHz: [],
             recommendedChannel: nil,
+            recommendedChannel5GHz: nil,
             overallQuality: .none,
             qualityScore: 0,
             issues: [],

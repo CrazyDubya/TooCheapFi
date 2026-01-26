@@ -1,0 +1,73 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  build:
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.9'
+
+      - name: Build (Debug)
+        run: swift build
+
+      - name: Build (Release)
+        run: swift build -c release
+
+      - name: Check Version Flag
+        run: .build/release/TooCheapFi --version
+
+      - name: Check Help Flag
+        run: .build/release/TooCheapFi --help
+
+      - name: Archive Release Binary
+        uses: actions/upload-artifact@v4
+        with:
+          name: TooCheapFi-macos
+          path: .build/release/TooCheapFi
+
+  release:
+    needs: build
+    runs-on: macos-14
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.9'
+
+      - name: Build Universal Binary
+        run: |
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
+          mkdir -p dist
+          lipo -create \
+            .build/arm64-apple-macosx/release/TooCheapFi \
+            .build/x86_64-apple-macosx/release/TooCheapFi \
+            -output dist/TooCheapFi
+
+      - name: Create Archive
+        run: |
+          cd dist
+          tar -czvf TooCheapFi-${{ github.ref_name }}-macos-universal.tar.gz TooCheapFi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: dist/TooCheapFi-${{ github.ref_name }}-macos-universal.tar.gz
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

@@ -8,6 +8,10 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
     private var menu: NSMenu!
     private var networkMonitor: NetworkMonitor!
 
+    private var currentStatus: NetworkStatus {
+        networkMonitor?.currentStatus ?? .unknown
+    }
+
     static func main() {
         // Handle command line arguments
         let args = CommandLine.arguments
@@ -58,6 +62,11 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         // Create menu
         menu = NSMenu()
         statusItem.menu = menu
+
+        // Request notification permissions
+        NotificationManager.shared.requestPermission { granted in
+            print("Notifications \(granted ? "enabled" : "disabled")")
+        }
 
         // Initialize network monitor
         networkMonitor = NetworkMonitor()
@@ -164,6 +173,29 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         let httpText = "\(httpEmoji) HTTP: \(status.httpWorking ? "Working" : (status.captivePortalDetected ? "Captive Portal" : "Failed"))"
         menu.addItem(createMenuItem(httpText))
 
+        // Speed Test Result
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(createSectionHeader("Speed Test"))
+
+        switch status.speedTest.status {
+        case .notRun:
+            menu.addItem(createMenuItem("   No speed test run yet"))
+        case .running:
+            menu.addItem(createMenuItem("   ⏳ Testing download speed..."))
+        case .completed:
+            let speedEmoji: String
+            switch status.speedTest.speedQuality {
+            case "Excellent": speedEmoji = "🚀"
+            case "Good": speedEmoji = "✅"
+            case "Fair": speedEmoji = "🟡"
+            case "Slow": speedEmoji = "🟠"
+            default: speedEmoji = "🔴"
+            }
+            menu.addItem(createMenuItem("   \(speedEmoji) Download: \(status.speedTest.downloadSpeedDescription) (\(status.speedTest.speedQuality))"))
+        case .failed:
+            menu.addItem(createMenuItem("   ❌ Speed test failed"))
+        }
+
         // Channel Analysis (if on Wi-Fi and we have data)
         if !status.channelAnalysis.isEmpty {
             menu.addItem(NSMenuItem.separator())
@@ -180,15 +212,53 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
 
                 var channelText = "   \(congestionEmoji) Ch \(analysis.channel): \(analysis.networksOnChannel) networks"
                 if analysis.isRecommended {
-                    channelText += " ⭐ Recommended"
+                    channelText += " ⭐"
                 }
-                if let wifi = status.wifiInfo, wifi.channel == analysis.channel {
+                if let wifi = status.wifiInfo, wifi.channel == analysis.channel && wifi.channelBand == "2.4 GHz" {
                     channelText += " (current)"
                 }
                 menu.addItem(createMenuItem(channelText))
             }
 
             if let recommended = status.recommendedChannel {
+                menu.addItem(createMenuItem("   💡 Consider switching to channel \(recommended)"))
+            }
+        }
+
+        // 5 GHz Channel Analysis
+        if !status.channelAnalysis5GHz.isEmpty {
+            menu.addItem(NSMenuItem.separator())
+            menu.addItem(createSectionHeader("Channel Analysis (5 GHz)"))
+
+            // Only show channels that have networks or are recommended
+            let relevantChannels = status.channelAnalysis5GHz.filter {
+                $0.networksOnChannel > 0 || $0.isRecommended
+            }
+
+            if relevantChannels.isEmpty {
+                menu.addItem(createMenuItem("   🟢 All channels clear"))
+            } else {
+                for analysis in relevantChannels.prefix(5) {  // Limit display
+                    let congestionEmoji: String
+                    switch analysis.congestionLevel {
+                    case "None": congestionEmoji = "🟢"
+                    case "Low": congestionEmoji = "🟡"
+                    case "Medium": congestionEmoji = "🟠"
+                    default: congestionEmoji = "🔴"
+                    }
+
+                    var channelText = "   \(congestionEmoji) Ch \(analysis.channel): \(analysis.networksOnChannel) networks"
+                    if analysis.isRecommended {
+                        channelText += " ⭐"
+                    }
+                    if let wifi = status.wifiInfo, wifi.channel == analysis.channel && wifi.channelBand == "5 GHz" {
+                        channelText += " (current)"
+                    }
+                    menu.addItem(createMenuItem(channelText))
+                }
+            }
+
+            if let recommended = status.recommendedChannel5GHz {
                 menu.addItem(createMenuItem("   💡 Consider switching to channel \(recommended)"))
             }
         }
@@ -230,6 +300,31 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
         let refreshItem = NSMenuItem(title: "Refresh Status", action: #selector(refreshStatus), keyEquivalent: "r")
         refreshItem.target = self
         menu.addItem(refreshItem)
+
+        let speedTestItem = NSMenuItem(title: "Run Speed Test", action: #selector(runSpeedTest), keyEquivalent: "s")
+        speedTestItem.target = self
+        if status.speedTest.status == .running {
+            speedTestItem.isEnabled = false
+            speedTestItem.title = "Speed Test Running..."
+        }
+        menu.addItem(speedTestItem)
+
+        menu.addItem(NSMenuItem.separator())
+
+        // Settings submenu
+        let settingsMenu = NSMenu()
+
+        let notificationItem = NSMenuItem(
+            title: NotificationManager.shared.isEnabled ? "✓ Notifications Enabled" : "  Notifications Disabled",
+            action: #selector(toggleNotifications),
+            keyEquivalent: ""
+        )
+        notificationItem.target = self
+        settingsMenu.addItem(notificationItem)
+
+        let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        settingsMenuItem.submenu = settingsMenu
+        menu.addItem(settingsMenuItem)
 
         menu.addItem(NSMenuItem.separator())
 
@@ -292,6 +387,27 @@ class TooCheapFiApp: NSObject, NSApplicationDelegate {
 
     @objc func refreshStatus() {
         networkMonitor.checkStatus()
+    }
+
+    @objc func runSpeedTest() {
+        networkMonitor.runSpeedTest { [weak self] result in
+            // Menu will be updated automatically via onStatusChange
+            print("Speed test completed: \(result.downloadSpeedDescription)")
+        }
+    }
+
+    @objc func toggleNotifications() {
+        let currentState = NotificationManager.shared.isEnabled
+        if currentState {
+            NotificationManager.shared.setEnabled(false)
+        } else {
+            // Request permission if enabling
+            NotificationManager.shared.requestPermission { granted in
+                NotificationManager.shared.setEnabled(granted)
+            }
+        }
+        // Refresh menu to show updated state
+        updateMenu(with: currentStatus)
     }
 
     @objc func quitApp() {
