@@ -2,13 +2,13 @@ import Foundation
 import os.log
 
 /// Log levels for categorizing messages
-enum LogLevel: String {
+public enum LogLevel: String {
     case debug = "DEBUG"
     case info = "INFO"
     case warning = "WARNING"
     case error = "ERROR"
 
-    var osLogType: OSLogType {
+    public var osLogType: OSLogType {
         switch self {
         case .debug: return .debug
         case .info: return .info
@@ -20,8 +20,8 @@ enum LogLevel: String {
 
 /// Centralized logging for TooCheapFi
 /// Uses os_log for system integration and optionally logs to file
-final class Logger {
-    static let shared = Logger()
+public final class Logger {
+    public static let shared = Logger()
 
     private let osLog = OSLog(subsystem: "com.toocheapfi", category: "general")
     private let fileQueue = DispatchQueue(label: "com.toocheapfi.logger")
@@ -47,25 +47,25 @@ final class Logger {
 
     // MARK: - Public API
 
-    func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    public func debug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
         log(.debug, message, file: file, function: function, line: line)
     }
 
-    func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    public func info(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
         log(.info, message, file: file, function: function, line: line)
     }
 
-    func warning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    public func warning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
         log(.warning, message, file: file, function: function, line: line)
     }
 
-    func error(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    public func error(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
         log(.error, message, file: file, function: function, line: line)
     }
 
     // MARK: - Core Logging
 
-    func log(_ level: LogLevel, _ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+    public func log(_ level: LogLevel, _ message: String, file: String = #file, function: String = #function, line: Int = #line) {
         guard shouldLog(level) else { return }
 
         let fileName = (file as NSString).lastPathComponent
@@ -133,18 +133,18 @@ final class Logger {
 
 // MARK: - Convenience Global Functions
 
-func logDebug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+public func logDebug(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
     Logger.shared.debug(message, file: file, function: function, line: line)
 }
 
-func logInfo(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+public func logInfo(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
     Logger.shared.info(message, file: file, function: function, line: line)
 }
 
-func logWarning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+public func logWarning(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
     Logger.shared.warning(message, file: file, function: function, line: line)
 }
 
-func logError(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
+public func logError(_ message: String, file: String = #file, function: String = #function, line: Int = #line) {
     Logger.shared.error(message, file: file, function: function, line: line)
 }

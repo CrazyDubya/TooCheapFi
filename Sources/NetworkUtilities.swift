@@ -3,7 +3,7 @@ import Network
 import SystemConfiguration
 
 /// Low-level network utility functions
-enum NetworkUtilities {
+public enum NetworkUtilities {
 
     private static let monitorQueue = DispatchQueue(label: "com.toocheapfi.utilities")
 
@@ -14,7 +14,7 @@ enum NetworkUtilities {
     ///   - host: IP address or hostname to ping
     ///   - timeout: Maximum time to wait for response
     /// - Returns: Tuple of (isReachable, latencyInMs)
-    static func ping(_ host: String, timeout: TimeInterval) -> (reachable: Bool, latency: Double?) {
+    public static func ping(_ host: String, timeout: TimeInterval) -> (reachable: Bool, latency: Double?) {
         let startTime = CFAbsoluteTimeGetCurrent()
         let semaphore = DispatchSemaphore(value: 0)
         var isReachable = false
@@ -57,7 +57,7 @@ enum NetworkUtilities {
     ///   - port: TCP port number
     ///   - timeout: Maximum time to wait for connection
     /// - Returns: True if connection succeeded
-    static func tcpConnect(host: String, port: Int, timeout: TimeInterval) -> Bool {
+    public static func tcpConnect(host: String, port: Int, timeout: TimeInterval) -> Bool {
         let semaphore = DispatchSemaphore(value: 0)
         var connected = false
 
@@ -94,7 +94,7 @@ enum NetworkUtilities {
     ///   - domain: Domain name to resolve
     ///   - timeout: Maximum time to wait for resolution
     /// - Returns: Tuple of (resolved, latencyInMs)
-    static func resolveDNS(_ domain: String, timeout: TimeInterval) -> (resolved: Bool, latency: Double?) {
+    public static func resolveDNS(_ domain: String, timeout: TimeInterval) -> (resolved: Bool, latency: Double?) {
         let startTime = CFAbsoluteTimeGetCurrent()
         let semaphore = DispatchSemaphore(value: 0)
         var resolved = false
@@ -129,7 +129,7 @@ enum NetworkUtilities {
     // MARK: - Gateway Detection
 
     /// Returns the default gateway IP address
-    static func getDefaultGateway() -> String? {
+    public static func getDefaultGateway() -> String? {
         guard let routeInfo = SCDynamicStoreCopyValue(
             nil,
             "State:/Network/Global/IPv4" as CFString
@@ -143,11 +143,11 @@ enum NetworkUtilities {
     // MARK: - HTTP Request
 
     /// HTTP request result
-    struct HTTPResult {
-        let success: Bool
-        let statusCode: Int?
-        let body: String?
-        let redirectURL: String?
+    public struct HTTPResult {
+        public let success: Bool
+        public let statusCode: Int?
+        public let body: String?
+        public let redirectURL: String?
     }
 
     /// Performs an HTTP GET request
@@ -155,7 +155,7 @@ enum NetworkUtilities {
     ///   - urlString: URL to fetch
     ///   - timeout: Maximum time to wait
     /// - Returns: HTTP result with status code and body
-    static func httpGet(_ urlString: String, timeout: TimeInterval) -> HTTPResult {
+    public static func httpGet(_ urlString: String, timeout: TimeInterval) -> HTTPResult {
         let semaphore = DispatchSemaphore(value: 0)
         var result = HTTPResult(success: false, statusCode: nil, body: nil, redirectURL: nil)
 

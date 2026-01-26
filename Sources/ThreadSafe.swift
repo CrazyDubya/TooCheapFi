@@ -2,15 +2,15 @@ import Foundation
 
 /// A property wrapper that provides thread-safe access to a value
 @propertyWrapper
-final class ThreadSafe<Value> {
+public final class ThreadSafe<Value> {
     private var value: Value
     private let lock = NSLock()
 
-    init(wrappedValue: Value) {
+    public init(wrappedValue: Value) {
         self.value = wrappedValue
     }
 
-    var wrappedValue: Value {
+    public var wrappedValue: Value {
         get {
             lock.lock()
             defer { lock.unlock() }
@@ -24,14 +24,14 @@ final class ThreadSafe<Value> {
     }
 
     /// Provides atomic access for read-modify-write operations
-    func modify(_ transform: (inout Value) -> Void) {
+    public func modify(_ transform: (inout Value) -> Void) {
         lock.lock()
         defer { lock.unlock() }
         transform(&value)
     }
 
     /// Provides atomic access for conditional operations
-    func withValue<T>(_ operation: (Value) -> T) -> T {
+    public func withValue<T>(_ operation: (Value) -> T) -> T {
         lock.lock()
         defer { lock.unlock() }
         return operation(value)
@@ -39,42 +39,44 @@ final class ThreadSafe<Value> {
 }
 
 /// A thread-safe array wrapper with common collection operations
-final class ThreadSafeArray<Element> {
+public final class ThreadSafeArray<Element> {
     private var array: [Element] = []
     private let lock = NSLock()
 
-    var count: Int {
+    public init() {}
+
+    public var count: Int {
         lock.lock()
         defer { lock.unlock() }
         return array.count
     }
 
-    var isEmpty: Bool {
+    public var isEmpty: Bool {
         lock.lock()
         defer { lock.unlock() }
         return array.isEmpty
     }
 
-    func append(_ element: Element) {
+    public func append(_ element: Element) {
         lock.lock()
         defer { lock.unlock() }
         array.append(element)
     }
 
-    func removeAll() {
+    public func removeAll() {
         lock.lock()
         defer { lock.unlock() }
         array.removeAll()
     }
 
-    func forEach(_ body: (Element) -> Void) {
+    public func forEach(_ body: (Element) -> Void) {
         lock.lock()
         let copy = array
         lock.unlock()
         copy.forEach(body)
     }
 
-    func toArray() -> [Element] {
+    public func toArray() -> [Element] {
         lock.lock()
         defer { lock.unlock() }
         return array

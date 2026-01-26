@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Enums
 
-enum InterfaceType: String {
+public enum InterfaceType: String {
     case wifi = "Wi-Fi"
     case ethernet = "Ethernet"
     case cellular = "Cellular"
@@ -11,14 +11,14 @@ enum InterfaceType: String {
     case none = "None"
 }
 
-enum ConnectionQuality: String {
+public enum ConnectionQuality: String {
     case excellent = "Excellent"
     case good = "Good"
     case fair = "Fair"
     case poor = "Poor"
     case none = "No Connection"
 
-    var score: Int {
+    public var score: Int {
         switch self {
         case .excellent: return 100
         case .good: return 75
@@ -29,7 +29,7 @@ enum ConnectionQuality: String {
     }
 }
 
-enum SignalQuality: String {
+public enum SignalQuality: String {
     case excellent = "Excellent"
     case good = "Good"
     case fair = "Fair"
@@ -37,7 +37,7 @@ enum SignalQuality: String {
     case veryWeak = "Very Weak"
     case none = "No Signal"
 
-    static func from(rssi: Int) -> SignalQuality {
+    public static func from(rssi: Int) -> SignalQuality {
         switch rssi {
         case -50...0: return .excellent
         case -60..<(-50): return .good
@@ -48,7 +48,7 @@ enum SignalQuality: String {
         }
     }
 
-    static func from(snr: Int) -> SignalQuality {
+    public static func from(snr: Int) -> SignalQuality {
         switch snr {
         case 40...: return .excellent
         case 25..<40: return .good
@@ -61,21 +61,21 @@ enum SignalQuality: String {
 
 // MARK: - Wi-Fi Info
 
-struct WiFiInfo {
-    var ssid: String?
-    var bssid: String?
-    var rssi: Int                    // Signal strength in dBm
-    var noise: Int                   // Noise floor in dBm
-    var snr: Int { rssi - noise }    // Signal-to-noise ratio
-    var channel: Int
-    var channelBand: String          // "2.4 GHz", "5 GHz", "6 GHz"
-    var channelWidth: Int            // 20, 40, 80, 160 MHz
-    var transmitRate: Double         // Mbps
-    var phyMode: String              // "802.11n", "802.11ac", etc.
-    var security: String             // "WPA2", "WPA3", etc.
-    var signalQuality: SignalQuality
+public struct WiFiInfo {
+    public var ssid: String?
+    public var bssid: String?
+    public var rssi: Int                    // Signal strength in dBm
+    public var noise: Int                   // Noise floor in dBm
+    public var snr: Int { rssi - noise }    // Signal-to-noise ratio
+    public var channel: Int
+    public var channelBand: String          // "2.4 GHz", "5 GHz", "6 GHz"
+    public var channelWidth: Int            // 20, 40, 80, 160 MHz
+    public var transmitRate: Double         // Mbps
+    public var phyMode: String              // "802.11n", "802.11ac", etc.
+    public var security: String             // "WPA2", "WPA3", etc.
+    public var signalQuality: SignalQuality
 
-    static var unknown: WiFiInfo {
+    public static var unknown: WiFiInfo {
         WiFiInfo(
             ssid: nil,
             bssid: nil,
@@ -94,47 +94,47 @@ struct WiFiInfo {
 
 // MARK: - Neighboring Network
 
-struct NeighboringNetwork {
-    var ssid: String
-    var bssid: String
-    var rssi: Int
-    var channel: Int
-    var channelBand: String
-    var security: String
+public struct NeighboringNetwork {
+    public var ssid: String
+    public var bssid: String
+    public var rssi: Int
+    public var channel: Int
+    public var channelBand: String
+    public var security: String
 }
 
 // MARK: - Channel Analysis
 
-struct ChannelAnalysis {
-    var channel: Int
-    var band: String
-    var networksOnChannel: Int
-    var networksOnAdjacentChannels: Int
-    var strongestCompetitorRSSI: Int
-    var congestionLevel: String      // "Low", "Medium", "High"
-    var isRecommended: Bool
+public struct ChannelAnalysis {
+    public var channel: Int
+    public var band: String
+    public var networksOnChannel: Int
+    public var networksOnAdjacentChannels: Int
+    public var strongestCompetitorRSSI: Int
+    public var congestionLevel: String      // "Low", "Medium", "High"
+    public var isRecommended: Bool
 }
 
 // MARK: - Issue
 
-struct NetworkIssue {
-    var severity: IssueSeverity
-    var title: String
-    var description: String
-    var category: IssueCategory
+public struct NetworkIssue {
+    public var severity: IssueSeverity
+    public var title: String
+    public var description: String
+    public var category: IssueCategory
 }
 
-enum IssueSeverity: Int, Comparable {
+public enum IssueSeverity: Int, Comparable {
     case critical = 3
     case warning = 2
     case info = 1
 
-    static func < (lhs: IssueSeverity, rhs: IssueSeverity) -> Bool {
+    public static func < (lhs: IssueSeverity, rhs: IssueSeverity) -> Bool {
         lhs.rawValue < rhs.rawValue
     }
 }
 
-enum IssueCategory {
+public enum IssueCategory {
     case connectivity
     case wifi
     case channel
@@ -144,30 +144,30 @@ enum IssueCategory {
 
 // MARK: - Recommendation
 
-struct NetworkRecommendation {
-    var priority: Int
-    var title: String
-    var steps: [String]
-    var category: IssueCategory
+public struct NetworkRecommendation {
+    public var priority: Int
+    public var title: String
+    public var steps: [String]
+    public var category: IssueCategory
 }
 
 // MARK: - Speed Test Result
 
-struct SpeedTestResult {
-    var downloadSpeed: Double?       // Mbps
-    var uploadSpeed: Double?         // Mbps (future)
-    var testTime: Date
-    var testServer: String
-    var status: SpeedTestStatus
+public struct SpeedTestResult {
+    public var downloadSpeed: Double?       // Mbps
+    public var uploadSpeed: Double?         // Mbps (future)
+    public var testTime: Date
+    public var testServer: String
+    public var status: SpeedTestStatus
 
-    enum SpeedTestStatus: String {
+    public enum SpeedTestStatus: String {
         case notRun = "Not Run"
         case running = "Testing..."
         case completed = "Completed"
         case failed = "Failed"
     }
 
-    var downloadSpeedDescription: String {
+    public var downloadSpeedDescription: String {
         guard let speed = downloadSpeed else { return "N/A" }
         if speed >= 100 {
             return String(format: "%.0f Mbps", speed)
@@ -178,7 +178,7 @@ struct SpeedTestResult {
         }
     }
 
-    var speedQuality: String {
+    public var speedQuality: String {
         guard let speed = downloadSpeed else { return "Unknown" }
         switch speed {
         case 100...: return "Excellent"
@@ -189,71 +189,71 @@ struct SpeedTestResult {
         }
     }
 
-    static var notRun: SpeedTestResult {
+    public static var notRun: SpeedTestResult {
         SpeedTestResult(downloadSpeed: nil, uploadSpeed: nil, testTime: Date(), testServer: "", status: .notRun)
     }
 }
 
 // MARK: - Main Network Status
 
-struct NetworkStatus {
+public struct NetworkStatus {
     // Interface Layer
-    var interfaceType: InterfaceType
-    var interfaceName: String?
-    var localIP: String?
-    var hasIPv6: Bool
+    public var interfaceType: InterfaceType
+    public var interfaceName: String?
+    public var localIP: String?
+    public var hasIPv6: Bool
 
     // Wi-Fi Details (only populated if on Wi-Fi)
-    var wifiInfo: WiFiInfo?
+    public var wifiInfo: WiFiInfo?
 
     // Gateway/Router Layer
-    var gatewayReachable: Bool
-    var gatewayIP: String?
-    var gatewayLatency: Double?      // ms
+    public var gatewayReachable: Bool
+    public var gatewayIP: String?
+    public var gatewayLatency: Double?      // ms
 
     // Internet Layer
-    var internetReachable: Bool
-    var internetLatency: Double?     // ms
-    var testedTargets: [String]      // Which IPs were tested
+    public var internetReachable: Bool
+    public var internetLatency: Double?     // ms
+    public var testedTargets: [String]      // Which IPs were tested
 
     // DNS Layer
-    var dnsWorking: Bool
-    var dnsServer: String?
-    var dnsLatency: Double?          // ms
-    var testedDomains: [String]      // Which domains were tested
+    public var dnsWorking: Bool
+    public var dnsServer: String?
+    public var dnsLatency: Double?          // ms
+    public var testedDomains: [String]      // Which domains were tested
 
     // HTTP Layer (captive portal detection)
-    var httpWorking: Bool
-    var captivePortalDetected: Bool
-    var captivePortalURL: String?
+    public var httpWorking: Bool
+    public var captivePortalDetected: Bool
+    public var captivePortalURL: String?
 
     // Speed Test
-    var speedTest: SpeedTestResult
+    public var speedTest: SpeedTestResult
 
     // Channel Analysis (only if Wi-Fi)
-    var neighboringNetworks: [NeighboringNetwork]
-    var channelAnalysis: [ChannelAnalysis]        // 2.4 GHz
-    var channelAnalysis5GHz: [ChannelAnalysis]    // 5 GHz
-    var recommendedChannel: Int?
-    var recommendedChannel5GHz: Int?
+    public var neighboringNetworks: [NeighboringNetwork]
+    public var channelAnalysis: [ChannelAnalysis]        // 2.4 GHz
+    public var channelAnalysis5GHz: [ChannelAnalysis]    // 5 GHz
+    public var recommendedChannel: Int?
+    public var recommendedChannel5GHz: Int?
 
     // Overall Assessment
-    var overallQuality: ConnectionQuality
-    var qualityScore: Int            // 0-100
-    var issues: [NetworkIssue]
-    var recommendations: [NetworkRecommendation]
+    public var overallQuality: ConnectionQuality
+    public var qualityScore: Int            // 0-100
+    public var issues: [NetworkIssue]
+    public var recommendations: [NetworkRecommendation]
 
     // Legacy compatibility
-    var wifiConnected: Bool { interfaceType != .none }
-    var wifiStatus: String {
+    public var wifiConnected: Bool { interfaceType != .none }
+    public var wifiStatus: String {
         guard let wifi = wifiInfo else {
             return interfaceType == .none ? "Not Connected" : "\(interfaceType.rawValue) Connected"
         }
         return "\(wifi.ssid ?? "Unknown") (\(wifi.signalQuality.rawValue))"
     }
 
-    var routerReachable: Bool { gatewayReachable }
-    var routerStatus: String {
+    public var routerReachable: Bool { gatewayReachable }
+    public var routerStatus: String {
         if let ip = gatewayIP {
             if gatewayReachable {
                 if let latency = gatewayLatency {
@@ -266,8 +266,8 @@ struct NetworkStatus {
         return "No Gateway"
     }
 
-    var ispReachable: Bool { internetReachable }
-    var ispStatus: String {
+    public var ispReachable: Bool { internetReachable }
+    public var ispStatus: String {
         if internetReachable {
             if let latency = internetLatency {
                 return "Connected (\(Int(latency))ms)"
@@ -280,7 +280,7 @@ struct NetworkStatus {
         return "No Internet"
     }
 
-    var dnsStatus: String {
+    public var dnsStatus: String {
         if dnsWorking {
             if let latency = dnsLatency {
                 return "Working (\(Int(latency))ms)"
@@ -290,15 +290,15 @@ struct NetworkStatus {
         return "Failed"
     }
 
-    var isFullyConnected: Bool {
+    public var isFullyConnected: Bool {
         interfaceType != .none && gatewayReachable && internetReachable && dnsWorking && httpWorking && !captivePortalDetected
     }
 
-    var diagnoses: [String] {
+    public var diagnoses: [String] {
         issues.map { $0.description }
     }
 
-    var suggestedFixes: [String] {
+    public var suggestedFixes: [String] {
         recommendations.flatMap { rec in
             [rec.title] + rec.steps.enumerated().map { "\($0.offset + 1). \($0.element)" }
         }
@@ -306,7 +306,7 @@ struct NetworkStatus {
 
     // MARK: - Static Constructors
 
-    static var unknown: NetworkStatus {
+    public static var unknown: NetworkStatus {
         NetworkStatus(
             interfaceType: .none,
             interfaceName: nil,

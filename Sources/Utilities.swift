@@ -5,7 +5,7 @@ import Foundation
 /// Formats a duration in seconds to a human-readable string
 /// - Parameter seconds: Duration in seconds (accepts both Int and TimeInterval)
 /// - Returns: Formatted string like "1h 30m", "5m 30s", or "45s"
-func formatDuration(_ seconds: Int) -> String {
+public func formatDuration(_ seconds: Int) -> String {
     let hours = seconds / 3600
     let mins = (seconds % 3600) / 60
     let secs = seconds % 60
@@ -20,7 +20,7 @@ func formatDuration(_ seconds: Int) -> String {
 }
 
 /// Overload for TimeInterval (Double) input
-func formatDuration(_ seconds: TimeInterval) -> String {
+public func formatDuration(_ seconds: TimeInterval) -> String {
     formatDuration(Int(seconds))
 }
 
@@ -29,14 +29,14 @@ func formatDuration(_ seconds: TimeInterval) -> String {
 /// Formats bytes to a human-readable string
 /// - Parameter bytes: Number of bytes
 /// - Returns: Formatted string like "1.5 MB" or "256 KB"
-func formatBytes(_ bytes: Int64) -> String {
+public func formatBytes(_ bytes: Int64) -> String {
     let formatter = ByteCountFormatter()
     formatter.countStyle = .binary
     return formatter.string(fromByteCount: bytes)
 }
 
 /// Formats bytes to a human-readable string
-func formatBytes(_ bytes: Int) -> String {
+public func formatBytes(_ bytes: Int) -> String {
     formatBytes(Int64(bytes))
 }
 
@@ -45,7 +45,7 @@ func formatBytes(_ bytes: Int) -> String {
 /// Formats speed in Mbps to a human-readable string
 /// - Parameter mbps: Speed in megabits per second
 /// - Returns: Formatted string like "125.5 Mbps" or "1.2 Gbps"
-func formatSpeed(_ mbps: Double) -> String {
+public func formatSpeed(_ mbps: Double) -> String {
     if mbps >= 1000 {
         return String(format: "%.1f Gbps", mbps / 1000)
     } else if mbps >= 100 {
@@ -60,7 +60,7 @@ func formatSpeed(_ mbps: Double) -> String {
 // MARK: - Quality Emoji
 
 /// Returns an emoji representing connection quality
-func qualityEmoji(for quality: ConnectionQuality) -> String {
+public func qualityEmoji(for quality: ConnectionQuality) -> String {
     switch quality {
     case .excellent: return "🟢"
     case .good: return "🟡"
@@ -71,7 +71,7 @@ func qualityEmoji(for quality: ConnectionQuality) -> String {
 }
 
 /// Returns an emoji representing signal quality
-func signalEmoji(for quality: SignalQuality) -> String {
+public func signalEmoji(for quality: SignalQuality) -> String {
     switch quality {
     case .excellent, .good, .fair:
         return "📶"
@@ -85,7 +85,7 @@ func signalEmoji(for quality: SignalQuality) -> String {
 // MARK: - Congestion Emoji
 
 /// Returns an emoji representing congestion level
-func congestionEmoji(for level: String) -> String {
+public func congestionEmoji(for level: String) -> String {
     switch level {
     case "None": return "🟢"
     case "Low": return "🟡"

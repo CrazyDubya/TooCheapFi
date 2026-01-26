@@ -2,7 +2,7 @@ import Foundation
 
 /// Protocol for network request operations
 /// Allows mocking network calls in tests
-protocol NetworkRequestProvider {
+public protocol NetworkRequestProvider {
     /// Pings a host and returns success status and latency
     func ping(host: String, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?)
 
@@ -17,58 +17,70 @@ protocol NetworkRequestProvider {
 }
 
 /// Default implementation using system network utilities
-class SystemNetworkProvider: NetworkRequestProvider {
+public class SystemNetworkProvider: NetworkRequestProvider {
+    public init() {}
 
-    func ping(host: String, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
-        NetworkUtilities.ping(host: host, timeout: timeout)
+    public func ping(host: String, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
+        let result = NetworkUtilities.ping(host, timeout: timeout)
+        return (result.reachable, result.latency)
     }
 
-    func tcpConnect(host: String, port: Int, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
-        NetworkUtilities.tcpConnect(host: host, port: port, timeout: timeout)
+    public func tcpConnect(host: String, port: Int, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
+        let startTime = CFAbsoluteTimeGetCurrent()
+        let connected = NetworkUtilities.tcpConnect(host: host, port: port, timeout: timeout)
+        let elapsed = (CFAbsoluteTimeGetCurrent() - startTime) * 1000
+        return (connected, connected ? elapsed : nil)
     }
 
-    func resolveDNS(domain: String) -> (success: Bool, latency: TimeInterval?) {
-        NetworkUtilities.resolveDNS(domain: domain)
+    public func resolveDNS(domain: String) -> (success: Bool, latency: TimeInterval?) {
+        let result = NetworkUtilities.resolveDNS(domain, timeout: 5.0)
+        return (result.resolved, result.latency)
     }
 
-    func httpCheck(url: String) -> (success: Bool, isCaptivePortal: Bool, responseBody: String?) {
-        NetworkUtilities.httpCheck(url: url)
+    public func httpCheck(url: String) -> (success: Bool, isCaptivePortal: Bool, responseBody: String?) {
+        let result = NetworkUtilities.httpGet(url, timeout: 10.0)
+        let isCaptive = result.statusCode == 302 ||
+                        result.statusCode == 303 ||
+                        (result.body != nil && result.body != AppConstants.captivePortalExpectedResponse)
+        return (result.success, isCaptive, result.body)
     }
 }
 
 /// Mock implementation for testing
-class MockNetworkProvider: NetworkRequestProvider {
-    var pingResult: (success: Bool, latency: TimeInterval?) = (true, 10.0)
-    var tcpResult: (success: Bool, latency: TimeInterval?) = (true, 15.0)
-    var dnsResult: (success: Bool, latency: TimeInterval?) = (true, 5.0)
-    var httpResult: (success: Bool, isCaptivePortal: Bool, responseBody: String?) = (true, false, nil)
+public class MockNetworkProvider: NetworkRequestProvider {
+    public var pingResult: (success: Bool, latency: TimeInterval?) = (true, 10.0)
+    public var tcpResult: (success: Bool, latency: TimeInterval?) = (true, 15.0)
+    public var dnsResult: (success: Bool, latency: TimeInterval?) = (true, 5.0)
+    public var httpResult: (success: Bool, isCaptivePortal: Bool, responseBody: String?) = (true, false, nil)
 
-    var pingCallCount = 0
-    var tcpCallCount = 0
-    var dnsCallCount = 0
-    var httpCallCount = 0
+    public var pingCallCount = 0
+    public var tcpCallCount = 0
+    public var dnsCallCount = 0
+    public var httpCallCount = 0
 
-    func ping(host: String, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
+    public init() {}
+
+    public func ping(host: String, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
         pingCallCount += 1
         return pingResult
     }
 
-    func tcpConnect(host: String, port: Int, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
+    public func tcpConnect(host: String, port: Int, timeout: TimeInterval) -> (success: Bool, latency: TimeInterval?) {
         tcpCallCount += 1
         return tcpResult
     }
 
-    func resolveDNS(domain: String) -> (success: Bool, latency: TimeInterval?) {
+    public func resolveDNS(domain: String) -> (success: Bool, latency: TimeInterval?) {
         dnsCallCount += 1
         return dnsResult
     }
 
-    func httpCheck(url: String) -> (success: Bool, isCaptivePortal: Bool, responseBody: String?) {
+    public func httpCheck(url: String) -> (success: Bool, isCaptivePortal: Bool, responseBody: String?) {
         httpCallCount += 1
         return httpResult
     }
 
-    func reset() {
+    public func reset() {
         pingCallCount = 0
         tcpCallCount = 0
         dnsCallCount = 0

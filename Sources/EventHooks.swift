@@ -4,7 +4,7 @@ import Foundation
 
 /// Protocol for receiving network status events
 /// All methods have default empty implementations, making them optional
-protocol NetworkEventObserver: AnyObject {
+public protocol NetworkEventObserver: AnyObject {
     /// Called when network status changes
     func onStatusChanged(from oldStatus: NetworkStatus?, to newStatus: NetworkStatus)
 
@@ -37,8 +37,8 @@ extension NetworkEventObserver {
 // MARK: - Event Hook Manager
 
 /// Manages network event observers and dispatches events
-final class EventHookManager {
-    static let shared = EventHookManager()
+public final class EventHookManager {
+    public static let shared = EventHookManager()
 
     private var observers = NSHashTable<AnyObject>.weakObjects()
     private let queue = DispatchQueue(label: "com.toocheapfi.hooks", qos: .utility)
@@ -48,7 +48,7 @@ final class EventHookManager {
     // MARK: - Observer Management
 
     /// Adds an observer to receive network events
-    func addObserver(_ observer: NetworkEventObserver) {
+    public func addObserver(_ observer: NetworkEventObserver) {
         queue.async {
             self.observers.add(observer)
             logDebug("Added event observer: \(type(of: observer))")
@@ -56,7 +56,7 @@ final class EventHookManager {
     }
 
     /// Removes an observer
-    func removeObserver(_ observer: NetworkEventObserver) {
+    public func removeObserver(_ observer: NetworkEventObserver) {
         queue.async {
             self.observers.remove(observer)
             logDebug("Removed event observer: \(type(of: observer))")
@@ -64,14 +64,14 @@ final class EventHookManager {
     }
 
     /// Returns the current number of observers
-    var observerCount: Int {
+    public var observerCount: Int {
         queue.sync { observers.count }
     }
 
     // MARK: - Event Dispatching
 
     /// Notifies all observers of a status change
-    func notifyStatusChanged(from oldStatus: NetworkStatus?, to newStatus: NetworkStatus) {
+    public func notifyStatusChanged(from oldStatus: NetworkStatus?, to newStatus: NetworkStatus) {
         dispatchToObservers { observer in
             observer.onStatusChanged(from: oldStatus, to: newStatus)
         }
@@ -90,7 +90,7 @@ final class EventHookManager {
     }
 
     /// Notifies all observers that an outage started
-    func notifyOutageStarted(layer: String, time: Date) {
+    public func notifyOutageStarted(layer: String, time: Date) {
         logInfo("Outage started: \(layer)")
         dispatchToObservers { observer in
             observer.onOutageStarted(layer: layer, time: time)
@@ -98,7 +98,7 @@ final class EventHookManager {
     }
 
     /// Notifies all observers that an outage ended
-    func notifyOutageEnded(layer: String, duration: TimeInterval) {
+    public func notifyOutageEnded(layer: String, duration: TimeInterval) {
         logInfo("Outage ended: \(layer), duration: \(Int(duration))s")
         dispatchToObservers { observer in
             observer.onOutageEnded(layer: layer, duration: duration)
@@ -106,7 +106,7 @@ final class EventHookManager {
     }
 
     /// Notifies all observers of a quality change
-    func notifyQualityChanged(from oldQuality: ConnectionQuality, to newQuality: ConnectionQuality) {
+    public func notifyQualityChanged(from oldQuality: ConnectionQuality, to newQuality: ConnectionQuality) {
         logInfo("Quality changed: \(oldQuality) -> \(newQuality)")
         dispatchToObservers { observer in
             observer.onQualityChanged(from: oldQuality, to: newQuality)
@@ -114,7 +114,7 @@ final class EventHookManager {
     }
 
     /// Notifies all observers of a completed speed test
-    func notifySpeedTestCompleted(result: SpeedTestResult) {
+    public func notifySpeedTestCompleted(result: SpeedTestResult) {
         logInfo("Speed test completed: \(result.downloadSpeedDescription)")
         dispatchToObservers { observer in
             observer.onSpeedTestCompleted(result: result)
@@ -122,7 +122,7 @@ final class EventHookManager {
     }
 
     /// Notifies all observers of a signal drop
-    func notifySignalDrop(from oldRSSI: Int, to newRSSI: Int) {
+    public func notifySignalDrop(from oldRSSI: Int, to newRSSI: Int) {
         logWarning("Signal drop detected: \(oldRSSI) dBm -> \(newRSSI) dBm")
         dispatchToObservers { observer in
             observer.onSignalDrop(from: oldRSSI, to: newRSSI)
@@ -146,11 +146,11 @@ final class EventHookManager {
 // MARK: - Script Hook Runner
 
 /// Runs shell scripts in response to network events
-final class ScriptHookRunner: NetworkEventObserver {
+public final class ScriptHookRunner: NetworkEventObserver {
     private let scriptsPath: URL
     private let scriptQueue = DispatchQueue(label: "com.toocheapfi.scripts", qos: .utility)
 
-    init() {
+    public init() {
         scriptsPath = Preferences.configDirectory.appendingPathComponent("hooks")
 
         // Create hooks directory if needed
