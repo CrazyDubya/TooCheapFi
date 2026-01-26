@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for shared utility functions
 final class UtilitiesTests: XCTestCase {

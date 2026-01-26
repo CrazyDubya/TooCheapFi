@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for the event hooks system
 final class EventHooksTests: XCTestCase {

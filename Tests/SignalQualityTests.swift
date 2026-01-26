@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for signal quality classification
 final class SignalQualityTests: XCTestCase {

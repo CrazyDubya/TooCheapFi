@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for quality score calculations
 final class QualityScoreTests: XCTestCase {

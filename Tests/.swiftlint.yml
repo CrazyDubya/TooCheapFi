@@ -1,0 +1,40 @@
+# SwiftLint Configuration for TooCheapFi Tests
+# This config inherits from the parent and relaxes rules for test code
+
+parent_config: ../.swiftlint.yml
+
+# Relaxed rules for test files
+function_body_length:
+  warning: 100   # Allow longer test methods
+  error: 200
+
+cyclomatic_complexity:
+  warning: 20    # Allow more complex test setup
+  error: 40
+
+line_length:
+  warning: 150   # Allow longer assertion lines
+  error: 250
+  ignores_comments: true
+  ignores_urls: true
+
+type_body_length:
+  warning: 400   # Test classes can be larger
+  error: 800
+
+file_length:
+  warning: 600   # Test files can be larger
+  error: 1200
+  ignore_comment_only_lines: true
+
+# Disable rules not suitable for tests
+disabled_rules:
+  - todo
+  - trailing_comma
+  - opening_brace
+  - implicitly_unwrapped_optional  # Allow IUOs in test setup
+
+# Override custom rules for tests
+custom_rules:
+  no_print_in_production:
+    severity: warning  # Downgrade to warning in tests

@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for the Preferences system
 /// Note: These tests validate the JSON serialization and default values

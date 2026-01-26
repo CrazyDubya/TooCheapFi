@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for the connectivity checker module
 final class ConnectivityCheckerTests: XCTestCase {

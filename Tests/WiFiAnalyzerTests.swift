@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for WiFi analysis functionality
 final class WiFiAnalyzerTests: XCTestCase {

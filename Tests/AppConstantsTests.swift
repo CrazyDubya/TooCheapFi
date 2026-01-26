@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for application constants
 final class AppConstantsTests: XCTestCase {

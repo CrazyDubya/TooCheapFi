@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for the Logger functionality
 final class LoggerTests: XCTestCase {

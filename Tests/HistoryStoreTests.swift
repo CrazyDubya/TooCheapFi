@@ -1,4 +1,5 @@
 import XCTest
+@testable import TooCheapFiCore
 
 /// Tests for the history store database operations
 final class HistoryStoreTests: XCTestCase {

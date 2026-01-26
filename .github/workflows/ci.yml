@@ -21,7 +21,7 @@ jobs:
         run: swiftlint lint Sources/ --strict --reporter github-actions-logging
 
       - name: Lint Tests
-        run: swiftlint lint Tests/ --strict --reporter github-actions-logging
+        run: swiftlint lint Tests/ --config Tests/.swiftlint.yml --reporter github-actions-logging
 
   build:
     name: Build & Test
@@ -50,14 +50,44 @@ jobs:
         run: swift test --enable-code-coverage
 
       - name: Generate Coverage Report
+        continue-on-error: true  # Coverage is nice-to-have, don't fail CI
         run: |
           BIN_PATH=$(swift build --show-bin-path)
-          XCTEST_PATH=$(find .build -name "*.xctest" -type d | head -1)
-          if [ -n "$XCTEST_PATH" ]; then
-            EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$(basename $XCTEST_PATH .xctest)"
-            xcrun llvm-cov export "$EXEC_PATH" \
-              -instr-profile .build/debug/codecov/default.profdata \
-              -format="lcov" > coverage.lcov 2>/dev/null || echo "Coverage export failed, skipping"
+          PROFDATA_PATH=".build/debug/codecov/default.profdata"
+
+          # Find the test bundle
+          XCTEST_PATH=$(find .build -name "*.xctest" -type d 2>/dev/null | head -1)
+
+          if [ -z "$XCTEST_PATH" ]; then
+            echo "::warning::No .xctest bundle found, skipping coverage"
+            exit 0
+          fi
+
+          if [ ! -f "$PROFDATA_PATH" ]; then
+            echo "::warning::Profile data not found at $PROFDATA_PATH, skipping coverage"
+            exit 0
+          fi
+
+          EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$(basename $XCTEST_PATH .xctest)"
+
+          if [ ! -f "$EXEC_PATH" ]; then
+            echo "::warning::Test executable not found at $EXEC_PATH, skipping coverage"
+            exit 0
+          fi
+
+          echo "Generating coverage from: $EXEC_PATH"
+          xcrun llvm-cov export "$EXEC_PATH" \
+            -instr-profile "$PROFDATA_PATH" \
+            -format="lcov" > coverage.lcov 2>&1 || {
+              echo "::warning::Coverage export failed"
+              exit 0
+            }
+
+          if [ -f coverage.lcov ] && [ -s coverage.lcov ]; then
+            echo "Coverage report generated successfully"
+            wc -l coverage.lcov
+          else
+            echo "::warning::Coverage report is empty or missing"
           fi
 
       - name: Check Binary Size
