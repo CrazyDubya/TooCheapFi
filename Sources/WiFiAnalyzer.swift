@@ -131,6 +131,7 @@ struct WiFiAnalyzer {
                 )
             }
         } catch {
+            logWarning("WiFi network scan failed: \(error.localizedDescription)")
             return []
         }
     }

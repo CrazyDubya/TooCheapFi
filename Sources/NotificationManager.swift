@@ -7,6 +7,8 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
     private var lastNotifiedStatus: Bool?
     private var outageStartTime: Date?
     private var notificationsEnabled = true
+    private var lastSignalDropNotification: Date?
+    private let signalDropDebounceInterval: TimeInterval = 30  // seconds
 
     override init() {
         super.init()
@@ -60,11 +62,22 @@ class NotificationManager: NSObject, UNUserNotificationCenterDelegate {
             notifyCaptivePortal(url: newStatus.captivePortalURL)
         }
 
-        // Detect significant signal drop
+        // Detect significant signal drop (with debouncing)
         if let oldWifi = oldStatus?.wifiInfo, let newWifi = newStatus.wifiInfo {
             if oldWifi.signalQuality == .good || oldWifi.signalQuality == .excellent {
                 if newWifi.signalQuality == .weak || newWifi.signalQuality == .veryWeak {
-                    notifySignalDrop(from: oldWifi.rssi, to: newWifi.rssi)
+                    // Debounce: only notify if enough time has passed since last notification
+                    let shouldNotify: Bool
+                    if let lastNotification = lastSignalDropNotification {
+                        shouldNotify = Date().timeIntervalSince(lastNotification) >= signalDropDebounceInterval
+                    } else {
+                        shouldNotify = true
+                    }
+
+                    if shouldNotify {
+                        lastSignalDropNotification = Date()
+                        notifySignalDrop(from: oldWifi.rssi, to: newWifi.rssi)
+                    }
                 }
             }
         }

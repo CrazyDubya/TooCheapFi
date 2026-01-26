@@ -3,7 +3,7 @@ import Foundation
 /// Centralized constants for the application
 enum AppConstants {
     /// App version - single source of truth
-    static let version = "1.3.0"
+    static let version = "1.4.0"
 
     /// Bundle identifier
     static let bundleIdentifier = "com.toocheapfi"

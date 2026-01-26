@@ -49,6 +49,48 @@ struct Preferences: Codable {
     // MARK: - Speed Thresholds (Mbps)
     var speedSlow: Double = 50     // < 50 is considered slow
 
+    // MARK: - Validation
+
+    /// Validates and corrects preference values to ensure they're within acceptable ranges
+    mutating func validate() {
+        // Intervals must be reasonable
+        checkIntervalSeconds = max(1, min(300, checkIntervalSeconds))
+        pingTimeoutSeconds = max(1, min(30, pingTimeoutSeconds))
+        historyRetentionDays = max(1, min(365, historyRetentionDays))
+        speedTestSizeMB = max(1, min(100, speedTestSizeMB))
+        outageThresholdSeconds = max(0, min(300, outageThresholdSeconds))
+
+        // RSSI thresholds must be in valid range and properly ordered
+        rssiExcellent = max(-100, min(0, rssiExcellent))
+        rssiGood = max(-100, min(rssiExcellent, rssiGood))
+        rssiFair = max(-100, min(rssiGood, rssiFair))
+        rssiWeak = max(-100, min(rssiFair, rssiWeak))
+
+        // SNR thresholds
+        snrGood = max(0, min(100, snrGood))
+        snrPoor = max(0, min(snrGood, snrPoor))
+
+        // Latency thresholds must be positive and properly ordered
+        latencyGood = max(1, latencyGood)
+        latencyFair = max(latencyGood, latencyFair)
+        latencyPoor = max(latencyFair, latencyPoor)
+
+        // Congestion thresholds
+        congestionLow = max(0, congestionLow)
+        congestionMedium = max(congestionLow, congestionMedium)
+
+        // Speed threshold
+        speedSlow = max(1, speedSlow)
+
+        // Ensure we have at least one test target
+        if ispTestTargets.isEmpty {
+            ispTestTargets = ["8.8.8.8", "1.1.1.1", "208.67.222.222"]
+        }
+        if dnsTestDomains.isEmpty {
+            dnsTestDomains = ["apple.com", "cloudflare.com", "microsoft.com"]
+        }
+    }
+
     // MARK: - Singleton
 
     static var shared: Preferences = Preferences.load()
@@ -93,7 +135,8 @@ struct Preferences: Codable {
     static func load() -> Preferences {
         guard FileManager.default.fileExists(atPath: configPath.path) else {
             // Config file doesn't exist, create defaults
-            let defaults = Preferences()
+            var defaults = Preferences()
+            defaults.validate()
             do {
                 try defaults.save()
             } catch {
@@ -104,10 +147,13 @@ struct Preferences: Codable {
 
         do {
             let data = try Data(contentsOf: configPath)
-            return try JSONDecoder().decode(Preferences.self, from: data)
+            var prefs = try JSONDecoder().decode(Preferences.self, from: data)
+            prefs.validate()
+            return prefs
         } catch {
             logError("Failed to load preferences, using defaults: \(error)")
-            let defaults = Preferences()
+            var defaults = Preferences()
+            defaults.validate()
             do {
                 try defaults.save()
             } catch {

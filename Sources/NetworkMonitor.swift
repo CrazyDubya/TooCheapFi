@@ -22,6 +22,19 @@ class NetworkMonitor {
     @ThreadSafe private var lastSpeedTest: SpeedTestResult = .notRun
     @ThreadSafe private var speedTestInProgress = false
 
+    // Pause/resume state
+    @ThreadSafe private(set) var isPaused = false
+    @ThreadSafe private var pauseEndTime: Date?
+
+    // Reusable URLSession for speed tests
+    private lazy var speedTestSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
     deinit {
         stopMonitoring()
     }
@@ -55,9 +68,51 @@ class NetworkMonitor {
         pathMonitor.cancel()
     }
 
+    // MARK: - Pause/Resume
+
+    /// Pauses monitoring for the specified number of minutes
+    func pauseMonitoring(minutes: Int) {
+        isPaused = true
+        pauseEndTime = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        logInfo("Monitoring paused for \(minutes) minutes")
+    }
+
+    /// Resumes monitoring immediately
+    func resumeMonitoring() {
+        isPaused = false
+        pauseEndTime = nil
+        logInfo("Monitoring resumed")
+        checkStatus()
+    }
+
+    /// Returns the remaining pause time in seconds, or nil if not paused
+    var remainingPauseTime: TimeInterval? {
+        guard isPaused, let endTime = pauseEndTime else { return nil }
+        let remaining = endTime.timeIntervalSinceNow
+        return remaining > 0 ? remaining : nil
+    }
+
+    /// Checks if pause has expired and auto-resumes if needed
+    private func checkPauseExpiry() {
+        guard isPaused else { return }
+        if let endTime = pauseEndTime, Date() >= endTime {
+            logInfo("Pause expired, auto-resuming")
+            isPaused = false
+            pauseEndTime = nil
+        }
+    }
+
     // MARK: - Status Check
 
     func checkStatus() {
+        // Check if pause has expired
+        checkPauseExpiry()
+
+        // Skip check if paused
+        guard !isPaused else {
+            logDebug("Status check skipped (monitoring paused)")
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
 
@@ -159,6 +214,7 @@ class NetworkMonitor {
         }
 
         guard let url = URL(string: speedTestURL) else {
+            logError("Speed test failed: Invalid URL - \(speedTestURL)")
             lastSpeedTest.status = .failed
             speedTestInProgress = false
             completion(lastSpeedTest)
@@ -167,27 +223,22 @@ class NetworkMonitor {
 
         let startTime = CFAbsoluteTimeGetCurrent()
 
-        let config = URLSessionConfiguration.ephemeral
-        config.timeoutIntervalForRequest = 30
-        config.timeoutIntervalForResource = 30
-
-        let session = URLSession(configuration: config)
-
-        session.dataTask(with: url) { [weak self] data, _, error in
+        speedTestSession.dataTask(with: url) { [weak self] data, _, error in
             guard let self = self else { return }
 
             defer {
                 self.speedTestInProgress = false
-                session.invalidateAndCancel()
             }
 
-            if error != nil {
+            if let error = error {
+                logError("Speed test failed: \(error.localizedDescription)")
                 self.lastSpeedTest.status = .failed
                 completion(self.lastSpeedTest)
                 return
             }
 
             guard let data = data else {
+                logError("Speed test failed: No data received")
                 self.lastSpeedTest.status = .failed
                 completion(self.lastSpeedTest)
                 return

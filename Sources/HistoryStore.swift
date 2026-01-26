@@ -97,6 +97,14 @@ class HistoryStore {
         }
     }
 
+    /// Returns detailed SQLite error message
+    private func sqliteErrorMessage() -> String {
+        if let db = db {
+            return String(cString: sqlite3_errmsg(db))
+        }
+        return "Database not open"
+    }
+
     // MARK: - Record Events
 
     func recordStatus(_ status: NetworkStatus) {
@@ -116,7 +124,10 @@ class HistoryStore {
             """
 
             var stmt: OpaquePointer?
-            guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else {
+                logError("Failed to prepare recordStatus: \(self.sqliteErrorMessage())")
+                return
+            }
             defer { sqlite3_finalize(stmt) }
 
             var bindResult = SQLITE_OK
@@ -190,12 +201,20 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return -1 }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare startOutage: \(sqliteErrorMessage())")
+            return -1
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_text(stmt, 1, layer, -1, nil)
         sqlite3_bind_text(stmt, 2, cause, -1, nil)
-        sqlite3_step(stmt)
+
+        let stepResult = sqlite3_step(stmt)
+        if stepResult != SQLITE_DONE {
+            logError("Failed to execute startOutage: \(sqliteErrorMessage())")
+            return -1
+        }
 
         return sqlite3_last_insert_rowid(db)
     }
@@ -210,11 +229,18 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare endOutage: \(sqliteErrorMessage())")
+            return
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_int64(stmt, 1, id)
-        sqlite3_step(stmt)
+
+        let stepResult = sqlite3_step(stmt)
+        if stepResult != SQLITE_DONE {
+            logError("Failed to execute endOutage: \(sqliteErrorMessage())")
+        }
     }
 
     // MARK: - Record Speed Test
@@ -228,13 +254,20 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare recordSpeedTest: \(sqliteErrorMessage())")
+            return
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_double(stmt, 1, result.downloadSpeed ?? 0)
         sqlite3_bind_double(stmt, 2, result.uploadSpeed ?? 0)
         sqlite3_bind_text(stmt, 3, result.testServer, -1, nil)
-        sqlite3_step(stmt)
+
+        let stepResult = sqlite3_step(stmt)
+        if stepResult != SQLITE_DONE {
+            logError("Failed to execute recordSpeedTest: \(sqliteErrorMessage())")
+        }
     }
 
     // MARK: - Query History
@@ -258,7 +291,10 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return [] }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare getRecentOutages: \(sqliteErrorMessage())")
+            return []
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_int(stmt, 1, Int32(limit))
@@ -290,7 +326,10 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 100 }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare getUptimePercentage: \(sqliteErrorMessage())")
+            return 100
+        }
         defer { sqlite3_finalize(stmt) }
 
         let hoursParam = "-\(hours)"
@@ -316,7 +355,10 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare getTotalOutageTime: \(sqliteErrorMessage())")
+            return 0
+        }
         defer { sqlite3_finalize(stmt) }
 
         let hoursParam = "-\(hours)"
@@ -331,6 +373,54 @@ class HistoryStore {
 
     // MARK: - Export
 
+    /// Streams CSV export directly to file (memory efficient for large datasets)
+    func streamExportToCSV(to url: URL) throws {
+        // Create or truncate file
+        FileManager.default.createFile(atPath: url.path, contents: nil)
+        let handle = try FileHandle(forWritingTo: url)
+        defer { try? handle.close() }
+
+        // Write header
+        let header = "Timestamp,Interface,Gateway,Internet,DNS,HTTP,RSSI,SNR,Latency,Quality,Error\n"
+        handle.write(header.data(using: .utf8)!)
+
+        let sql = """
+        SELECT timestamp, interface_type, gateway_reachable, internet_reachable,
+               dns_working, http_working, rssi, snr, latency_ms, quality_score, error_layer
+        FROM events
+        ORDER BY timestamp DESC;
+        """
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            throw NSError(domain: "HistoryStore", code: 1, userInfo: [
+                NSLocalizedDescriptionKey: "Failed to prepare query: \(sqliteErrorMessage())"
+            ])
+        }
+        defer { sqlite3_finalize(stmt) }
+
+        var rowCount = 0
+        while sqlite3_step(stmt) == SQLITE_ROW {
+            let timestamp = String(cString: sqlite3_column_text(stmt, 0))
+            let interface = String(cString: sqlite3_column_text(stmt, 1))
+            let gateway = sqlite3_column_int(stmt, 2)
+            let internet = sqlite3_column_int(stmt, 3)
+            let dns = sqlite3_column_int(stmt, 4)
+            let http = sqlite3_column_int(stmt, 5)
+            let rssi = sqlite3_column_int(stmt, 6)
+            let snr = sqlite3_column_int(stmt, 7)
+            let latency = sqlite3_column_double(stmt, 8)
+            let quality = sqlite3_column_int(stmt, 9)
+            let error = sqlite3_column_text(stmt, 10).map { String(cString: $0) } ?? ""
+
+            let row = "\(timestamp),\(interface),\(gateway),\(internet),\(dns),\(http),\(rssi),\(snr),\(latency),\(quality),\(error)\n"
+            handle.write(row.data(using: .utf8)!)
+            rowCount += 1
+        }
+
+        logInfo("Exported \(rowCount) rows to \(url.path)")
+    }
+
     func exportToCSV() -> String {
         var csv = "Timestamp,Interface,Gateway,Internet,DNS,HTTP,RSSI,SNR,Latency,Quality,Error\n"
 
@@ -343,7 +433,10 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return csv }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare exportToCSV: \(sqliteErrorMessage())")
+            return csv
+        }
         defer { sqlite3_finalize(stmt) }
 
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -375,7 +468,10 @@ class HistoryStore {
         """
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return csv }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare exportOutagesToCSV: \(sqliteErrorMessage())")
+            return csv
+        }
         defer { sqlite3_finalize(stmt) }
 
         while sqlite3_step(stmt) == SQLITE_ROW {
@@ -407,10 +503,17 @@ class HistoryStore {
         let sql = "DELETE FROM \(table) WHERE \(column) < datetime('now', ?, 'localtime') \(extraCondition);"
 
         var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else {
+            logError("Failed to prepare cleanup for \(table): \(sqliteErrorMessage())")
+            return
+        }
         defer { sqlite3_finalize(stmt) }
 
         sqlite3_bind_text(stmt, 1, daysParam, -1, nil)
-        sqlite3_step(stmt)
+
+        let stepResult = sqlite3_step(stmt)
+        if stepResult != SQLITE_DONE {
+            logError("Failed to cleanup \(table): \(sqliteErrorMessage())")
+        }
     }
 }

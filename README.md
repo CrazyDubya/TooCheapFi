@@ -249,8 +249,8 @@ TooCheapFi/
 │   └── toocheapfi.rb             # Homebrew formula
 ├── Sources/
 │   ├── main.swift                # App entry point and menu bar UI
-│   ├── AppConstants.swift        # Centralized app constants (v1.3)
-│   ├── Utilities.swift           # Shared utility functions (v1.3)
+│   ├── AppConstants.swift        # Centralized app constants
+│   ├── Utilities.swift           # Shared utility functions
 │   ├── NetworkMonitor.swift      # Main monitoring coordinator
 │   ├── NetworkStatus.swift       # Status data models
 │   ├── NetworkUtilities.swift    # Low-level ping/TCP/DNS utilities
@@ -258,11 +258,14 @@ TooCheapFi/
 │   ├── WiFiAnalyzer.swift        # Wi-Fi info and channel analysis
 │   ├── IssueAnalyzer.swift       # Issue detection and quality scoring
 │   ├── NotificationManager.swift # macOS notifications
-│   ├── Preferences.swift         # User configuration with thresholds
+│   ├── Preferences.swift         # User configuration with validation
 │   ├── HistoryStore.swift        # SQLite history logging
 │   ├── EventHooks.swift          # Event observer system and script hooks
 │   ├── ThreadSafe.swift          # Thread-safe property wrapper
-│   └── Logger.swift              # Centralized logging (os_log)
+│   ├── Logger.swift              # Centralized logging (os_log)
+│   └── Protocols/                # Abstractions for testability (v1.4)
+│       ├── NetworkProvider.swift # Network request abstraction
+│       └── TimeProvider.swift    # Time abstraction
 ├── Tests/
 │   ├── PreferencesTests.swift
 │   ├── QualityScoreTests.swift
@@ -306,7 +309,15 @@ TooCheapFi/
 
 ## Version History
 
-### v1.3.0 (Current)
+### v1.4.0 (Current)
+- **Error Handling**: Detailed SQLite errors with `sqlite3_errmsg()` throughout HistoryStore
+- **Performance**: Reusable URLSession for speed tests, streaming CSV export
+- **Architecture**: Protocol abstractions (`NetworkProvider`, `TimeProvider`) for testability
+- **Features**: Pause/resume monitoring, preferences validation
+- **Notifications**: Signal drop debouncing (30s cooldown)
+- **Logging**: Speed test and WiFi scan errors now logged
+
+### v1.3.0
 - **Stability**: Eliminated Implicitly Unwrapped Optionals (IUOs) in main.swift
 - **Centralized Constants**: `AppConstants.swift` with single source for version, URLs, thresholds
 - **Shared Utilities**: `Utilities.swift` with consolidated formatting functions
