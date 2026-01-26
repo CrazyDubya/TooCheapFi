@@ -7,8 +7,8 @@ import CoreWLAN
 /// Delegates to specialized modules for specific checks
 class NetworkMonitor {
     var onStatusChange: ((NetworkStatus) -> Void)?
-    private(set) var currentStatus: NetworkStatus = .unknown
-    private var previousStatus: NetworkStatus?
+    @ThreadSafe private(set) var currentStatus: NetworkStatus = .unknown
+    @ThreadSafe private var previousStatus: NetworkStatus?
     private var timer: Timer?
     private let pathMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.toocheapfi.networkmonitor")
@@ -18,9 +18,13 @@ class NetworkMonitor {
     private let wifiAnalyzer = WiFiAnalyzer()
     private let issueAnalyzer = IssueAnalyzer()
 
-    // Speed test state
-    private var lastSpeedTest: SpeedTestResult = .notRun
-    private var speedTestInProgress = false
+    // Speed test state (thread-safe)
+    @ThreadSafe private var lastSpeedTest: SpeedTestResult = .notRun
+    @ThreadSafe private var speedTestInProgress = false
+
+    deinit {
+        stopMonitoring()
+    }
 
     private var speedTestURL: String {
         let bytes = Preferences.shared.speedTestSizeMB * 1_000_000
@@ -116,8 +120,13 @@ class NetworkMonitor {
             status.overallQuality = analysisResult.overallQuality
 
             DispatchQueue.main.async {
-                NotificationManager.shared.handleStatusChange(from: self.previousStatus, to: status)
+                let oldStatus = self.previousStatus
+
+                NotificationManager.shared.handleStatusChange(from: oldStatus, to: status)
                 HistoryStore.shared.recordStatus(status)
+
+                // Fire event hooks
+                EventHookManager.shared.notifyStatusChanged(from: oldStatus, to: status)
 
                 self.previousStatus = self.currentStatus
                 self.currentStatus = status
@@ -198,6 +207,9 @@ class NetworkMonitor {
             )
 
             HistoryStore.shared.recordSpeedTest(self.lastSpeedTest)
+
+            // Fire event hook
+            EventHookManager.shared.notifySpeedTestCompleted(result: self.lastSpeedTest)
 
             DispatchQueue.main.async {
                 var status = self.currentStatus

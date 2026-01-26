@@ -179,7 +179,9 @@ struct IssueAnalyzer {
         issues: inout [NetworkIssue],
         recommendations: inout [NetworkRecommendation]
     ) {
-        if wifi.rssi < -80 {
+        let prefs = Preferences.shared
+
+        if wifi.rssi < prefs.rssiWeak {
             issues.append(NetworkIssue(
                 severity: .critical,
                 title: "Very Weak Signal",
@@ -196,7 +198,7 @@ struct IssueAnalyzer {
                 ],
                 category: .wifi
             ))
-        } else if wifi.rssi < -70 {
+        } else if wifi.rssi < prefs.rssiFair {
             issues.append(NetworkIssue(
                 severity: .warning,
                 title: "Weak Signal",
@@ -217,7 +219,9 @@ struct IssueAnalyzer {
 
     private func analyzeSNR(_ wifi: WiFiInfo, issues: inout [NetworkIssue]) {
         let snr = wifi.snr
-        if snr < 10 {
+        let snrThreshold = Preferences.shared.snrPoor
+
+        if snr < snrThreshold {
             issues.append(NetworkIssue(
                 severity: .warning,
                 title: "High Interference",
@@ -342,11 +346,12 @@ struct IssueAnalyzer {
         if !status.dnsWorking { return 30 }
         if !status.httpWorking { score -= 10 }
 
-        // Latency penalties
+        // Latency penalties (using configurable thresholds)
+        let prefs = Preferences.shared
         if let latency = status.internetLatency {
-            if latency > 100 { score -= 20 }
-            else if latency > 50 { score -= 10 }
-            else if latency > 30 { score -= 5 }
+            if latency > prefs.latencyPoor { score -= 20 }
+            else if latency > prefs.latencyFair { score -= 10 }
+            else if latency > prefs.latencyGood { score -= 5 }
         }
 
         // Wi-Fi specific penalties
@@ -371,8 +376,9 @@ struct IssueAnalyzer {
     }
 
     private func snrPenalty(_ snr: Int) -> Int {
-        if snr < 15 { return 20 }
-        else if snr < 25 { return 10 }
+        let prefs = Preferences.shared
+        if snr < prefs.snrPoor { return 20 }
+        else if snr < prefs.snrGood { return 10 }
         return 0
     }
 
@@ -380,9 +386,11 @@ struct IssueAnalyzer {
         guard let channelAnalysis = analysis.first(where: { $0.channel == channel }) else {
             return 0
         }
-        if channelAnalysis.networksOnChannel > 10 { return 15 }
-        else if channelAnalysis.networksOnChannel > 5 { return 10 }
-        else if channelAnalysis.networksOnChannel > 2 { return 5 }
+        let prefs = Preferences.shared
+        let count = channelAnalysis.networksOnChannel
+        if count > prefs.congestionMedium + 3 { return 15 }  // High congestion
+        else if count > prefs.congestionLow + 2 { return 10 }  // Medium congestion
+        else if count > 2 { return 5 }  // Low congestion
         return 0
     }
 

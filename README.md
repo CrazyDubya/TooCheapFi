@@ -47,6 +47,12 @@ Don't want to pay for expensive network diagnostic tools? TooCheapFi is a free m
 - **Custom DNS Servers**: Use your preferred DNS targets
 - **Notification Control**: Enable/disable alert types
 - **History Retention**: Configure data retention period
+- **Quality Thresholds**: Customize RSSI, latency, and congestion thresholds
+
+### Event Hooks
+- **Observer Pattern**: Register Swift objects to receive network events
+- **Shell Script Hooks**: Execute custom scripts on network events
+- **Supported Events**: Outage start/end, quality changes, speed tests, signal drops
 
 ## Requirements
 
@@ -150,6 +156,78 @@ Preferences are stored in `~/Library/Application Support/TooCheapFi/config.json`
 
 Access via menu: **Settings > Open Config File...**
 
+### Configurable Thresholds
+
+You can customize quality thresholds in `config.json`:
+
+```json
+{
+  "rssiExcellent": -50,
+  "rssiGood": -60,
+  "rssiFair": -70,
+  "rssiWeak": -80,
+  "snrGood": 25,
+  "snrPoor": 15,
+  "latencyGood": 30,
+  "latencyFair": 50,
+  "latencyPoor": 100,
+  "congestionLow": 3,
+  "congestionMedium": 7,
+  "speedSlow": 50
+}
+```
+
+## Event Hooks
+
+TooCheapFi supports event hooks for automation and integration.
+
+### Shell Script Hooks
+
+Create executable scripts in `~/.config/toocheapfi/hooks/`:
+
+| Script Name | Arguments | Description |
+|-------------|-----------|-------------|
+| `on-outage-start` | `[layer] [timestamp]` | Called when outage begins |
+| `on-outage-end` | `[layer] [duration_seconds]` | Called when outage ends |
+| `on-quality-change` | `[old_quality] [new_quality]` | Called when quality changes |
+| `on-speed-test` | `[speed_mbps] [server]` | Called after speed test |
+| `on-signal-drop` | `[old_rssi] [new_rssi]` | Called on significant signal drop |
+
+**Example hook script** (`~/.config/toocheapfi/hooks/on-outage-start`):
+
+```bash
+#!/bin/bash
+LAYER=$1
+TIMESTAMP=$2
+echo "[$TIMESTAMP] Outage detected at $LAYER layer" >> ~/network-outages.log
+
+# Send notification via external service
+curl -X POST "https://your-webhook.example/notify" \
+  -d "message=Network outage: $LAYER layer down"
+```
+
+Make scripts executable: `chmod +x ~/.config/toocheapfi/hooks/on-outage-start`
+
+### Swift Observer API
+
+For programmatic integration, implement `NetworkEventObserver`:
+
+```swift
+class MyObserver: NetworkEventObserver {
+    func onOutageStarted(layer: String, time: Date) {
+        print("Outage started: \(layer)")
+    }
+
+    func onQualityChanged(from old: ConnectionQuality, to new: ConnectionQuality) {
+        print("Quality: \(old) -> \(new)")
+    }
+}
+
+// Register observer
+let observer = MyObserver()
+EventHookManager.shared.addObserver(observer)
+```
+
 ## Data Storage
 
 History is stored in `~/Library/Application Support/TooCheapFi/history.db`:
@@ -164,24 +242,40 @@ Export via menu: **Export Data > Export History to CSV...**
 
 ```
 TooCheapFi/
-├── Package.swift              # Swift Package Manager configuration
-├── Makefile                   # Build automation
+├── Package.swift                 # Swift Package Manager configuration
+├── Makefile                      # Build automation
+├── .swiftlint.yml                # SwiftLint configuration
 ├── Formula/
-│   └── toocheapfi.rb          # Homebrew formula
+│   └── toocheapfi.rb             # Homebrew formula
 ├── Sources/
-│   ├── main.swift             # App entry point and menu bar UI
-│   ├── NetworkMonitor.swift   # Network diagnostics logic
-│   ├── NetworkStatus.swift    # Status data models
-│   ├── NotificationManager.swift  # macOS notifications
-│   ├── Preferences.swift      # User configuration
-│   └── HistoryStore.swift     # SQLite history logging
+│   ├── main.swift                # App entry point and menu bar UI
+│   ├── NetworkMonitor.swift      # Main monitoring coordinator
+│   ├── NetworkStatus.swift       # Status data models
+│   ├── NetworkUtilities.swift    # Low-level ping/TCP/DNS utilities
+│   ├── ConnectivityChecker.swift # Multi-layer connectivity tests
+│   ├── WiFiAnalyzer.swift        # Wi-Fi info and channel analysis
+│   ├── IssueAnalyzer.swift       # Issue detection and quality scoring
+│   ├── NotificationManager.swift # macOS notifications
+│   ├── Preferences.swift         # User configuration with thresholds
+│   ├── HistoryStore.swift        # SQLite history logging
+│   ├── EventHooks.swift          # Event observer system and script hooks
+│   ├── ThreadSafe.swift          # Thread-safe property wrapper
+│   └── Logger.swift              # Centralized logging (os_log)
+├── Tests/
+│   ├── PreferencesTests.swift
+│   ├── QualityScoreTests.swift
+│   ├── SignalQualityTests.swift
+│   ├── EventHooksTests.swift
+│   ├── HistoryStoreTests.swift
+│   └── ConnectivityCheckerTests.swift
 ├── .github/
 │   └── workflows/
-│       └── ci.yml             # GitHub Actions CI
+│       └── ci.yml                # GitHub Actions (lint, test, build, release)
 └── docs/
-    ├── PLANNING.md            # Strategic vision
+    ├── PLANNING.md               # Strategic vision
+    ├── V1.2-PLAN.md              # v1.2 implementation plan
     ├── PHASE1-TECHNICAL-SPEC.md
-    ├── LOGIC-ANALYSIS.md      # Network checking analysis
+    ├── LOGIC-ANALYSIS.md         # Network checking analysis
     └── WIFI-DIAGNOSTICS-ANALYSIS.md
 ```
 
@@ -206,7 +300,27 @@ TooCheapFi/
 
 ## Version History
 
-### v1.0.0 (Current)
+### v1.2.0 (Current)
+- **Security**: Fixed SQL injection vulnerabilities with parameterized queries
+- **Stability**: Eliminated force unwraps throughout codebase
+- **Thread Safety**: Added `ThreadSafe` property wrapper and database queue
+- **Logging**: Centralized logging via `os_log` integration
+- **Event Hooks**: Observer pattern and shell script hooks for automation
+- **Configurable Thresholds**: Customize RSSI, latency, SNR, and congestion limits
+- **Memory Management**: Proper cleanup with `deinit` handlers
+- **Tests**: Comprehensive test suite for hooks, history, and connectivity
+
+### v1.1.0
+- **Code Quality**: SwiftLint integration with custom rules
+- **CI/CD**: Enhanced GitHub Actions (lint, test, DMG creation)
+- **Modularization**: Split NetworkMonitor into focused modules:
+  - `ConnectivityChecker` - Multi-layer connectivity tests
+  - `WiFiAnalyzer` - Wi-Fi info and channel analysis
+  - `IssueAnalyzer` - Issue detection and scoring
+  - `NetworkUtilities` - Low-level network operations
+- **Tests**: Added unit tests for preferences, quality scoring, signal quality
+
+### v1.0.0
 - Multi-layer connectivity testing with fallbacks
 - Comprehensive Wi-Fi diagnostics (RSSI, SNR, channel)
 - 2.4 GHz and 5 GHz channel analysis

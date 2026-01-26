@@ -99,7 +99,10 @@ enum NetworkUtilities {
         let semaphore = DispatchSemaphore(value: 0)
         var resolved = false
 
-        let host = CFHostCreateWithName(nil, domain as CFString).takeRetainedValue()
+        guard let hostRef = CFHostCreateWithName(nil, domain as CFString) else {
+            return (false, nil)
+        }
+        let host = hostRef.takeRetainedValue()
 
         // Timeout handler
         DispatchQueue.global().asyncAfter(deadline: .now() + timeout) {

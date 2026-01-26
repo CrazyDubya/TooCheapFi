@@ -76,9 +76,7 @@ struct ConnectivityChecker {
 
             if result.reachable {
                 if let lat = result.latency {
-                    if bestLatency == nil || lat < bestLatency! {
-                        bestLatency = lat
-                    }
+                    bestLatency = min(lat, bestLatency ?? .infinity)
                 }
                 return InternetResult(reachable: true, latency: bestLatency, testedTargets: testedTargets)
             }
@@ -113,9 +111,7 @@ struct ConnectivityChecker {
 
             if result.resolved {
                 if let lat = result.latency {
-                    if bestLatency == nil || lat < bestLatency! {
-                        bestLatency = lat
-                    }
+                    bestLatency = min(lat, bestLatency ?? .infinity)
                 }
                 return DNSResult(working: true, latency: bestLatency, testedDomains: testedDomains)
             }

@@ -8,13 +8,16 @@ class HistoryStore {
     private let dbPath: String
     private var currentOutageId: Int64?
     private var outageStartTime: Date?
+    private let dbQueue = DispatchQueue(label: "com.toocheapfi.database", qos: .utility)
 
     init() {
         dbPath = Preferences.historyPath.path
 
-        guard sqlite3_open(dbPath, &db) == SQLITE_OK else {
-            print("Failed to open database at \(dbPath)")
-            return
+        dbQueue.sync {
+            guard sqlite3_open(self.dbPath, &self.db) == SQLITE_OK else {
+                logError("Failed to open database at \(self.dbPath)")
+                return
+            }
         }
 
         createTables()
@@ -22,7 +25,11 @@ class HistoryStore {
     }
 
     deinit {
-        sqlite3_close(db)
+        dbQueue.sync {
+            if db != nil {
+                sqlite3_close(db)
+            }
+        }
     }
 
     // MARK: - Schema
@@ -84,7 +91,7 @@ class HistoryStore {
         var errMsg: UnsafeMutablePointer<CChar>?
         if sqlite3_exec(db, sql, nil, nil, &errMsg) != SQLITE_OK {
             if let errMsg = errMsg {
-                print("SQL Error: \(String(cString: errMsg))")
+                logError("SQL Error: \(String(cString: errMsg))")
                 sqlite3_free(errMsg)
             }
         }
@@ -95,37 +102,41 @@ class HistoryStore {
     func recordStatus(_ status: NetworkStatus) {
         guard Preferences.shared.historyEnabled else { return }
 
-        let sql = """
-        INSERT INTO events (
-            interface_type, wifi_connected, gateway_reachable, internet_reachable,
-            dns_working, http_working, captive_portal, rssi, snr, latency_ms,
-            quality_score, error_layer
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
-        """
-
-        var stmt: OpaquePointer?
-        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
-        defer { sqlite3_finalize(stmt) }
-
         let errorLayer = determineErrorLayer(status)
 
-        sqlite3_bind_text(stmt, 1, status.interfaceType.rawValue, -1, nil)
-        sqlite3_bind_int(stmt, 2, status.wifiConnected ? 1 : 0)
-        sqlite3_bind_int(stmt, 3, status.gatewayReachable ? 1 : 0)
-        sqlite3_bind_int(stmt, 4, status.internetReachable ? 1 : 0)
-        sqlite3_bind_int(stmt, 5, status.dnsWorking ? 1 : 0)
-        sqlite3_bind_int(stmt, 6, status.httpWorking ? 1 : 0)
-        sqlite3_bind_int(stmt, 7, status.captivePortalDetected ? 1 : 0)
-        sqlite3_bind_int(stmt, 8, Int32(status.wifiInfo?.rssi ?? 0))
-        sqlite3_bind_int(stmt, 9, Int32(status.wifiInfo?.snr ?? 0))
-        sqlite3_bind_double(stmt, 10, status.internetLatency ?? 0)
-        sqlite3_bind_int(stmt, 11, Int32(status.qualityScore))
-        sqlite3_bind_text(stmt, 12, errorLayer, -1, nil)
+        dbQueue.async { [weak self] in
+            guard let self = self else { return }
 
-        sqlite3_step(stmt)
+            let sql = """
+            INSERT INTO events (
+                interface_type, wifi_connected, gateway_reachable, internet_reachable,
+                dns_working, http_working, captive_portal, rssi, snr, latency_ms,
+                quality_score, error_layer
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?);
+            """
 
-        // Track outages
-        handleOutageTracking(status, errorLayer: errorLayer)
+            var stmt: OpaquePointer?
+            guard sqlite3_prepare_v2(self.db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+            defer { sqlite3_finalize(stmt) }
+
+            sqlite3_bind_text(stmt, 1, status.interfaceType.rawValue, -1, nil)
+            sqlite3_bind_int(stmt, 2, status.wifiConnected ? 1 : 0)
+            sqlite3_bind_int(stmt, 3, status.gatewayReachable ? 1 : 0)
+            sqlite3_bind_int(stmt, 4, status.internetReachable ? 1 : 0)
+            sqlite3_bind_int(stmt, 5, status.dnsWorking ? 1 : 0)
+            sqlite3_bind_int(stmt, 6, status.httpWorking ? 1 : 0)
+            sqlite3_bind_int(stmt, 7, status.captivePortalDetected ? 1 : 0)
+            sqlite3_bind_int(stmt, 8, Int32(status.wifiInfo?.rssi ?? 0))
+            sqlite3_bind_int(stmt, 9, Int32(status.wifiInfo?.snr ?? 0))
+            sqlite3_bind_double(stmt, 10, status.internetLatency ?? 0)
+            sqlite3_bind_int(stmt, 11, Int32(status.qualityScore))
+            sqlite3_bind_text(stmt, 12, errorLayer, -1, nil)
+
+            sqlite3_step(stmt)
+
+            // Track outages
+            self.handleOutageTracking(status, errorLayer: errorLayer)
+        }
     }
 
     private func determineErrorLayer(_ status: NetworkStatus) -> String? {
@@ -143,11 +154,21 @@ class HistoryStore {
 
         if isDown && currentOutageId == nil {
             // Start new outage
-            outageStartTime = Date()
-            currentOutageId = startOutage(layer: errorLayer ?? "unknown", cause: status.issues.first?.description)
-        } else if !isDown && currentOutageId != nil {
+            let startTime = Date()
+            outageStartTime = startTime
+            let layer = errorLayer ?? "unknown"
+            currentOutageId = startOutage(layer: layer, cause: status.issues.first?.description)
+
+            // Fire event hook
+            EventHookManager.shared.notifyOutageStarted(layer: layer, time: startTime)
+        } else if !isDown, let outageId = currentOutageId {
             // End outage
-            endOutage(id: currentOutageId!)
+            let duration = Date().timeIntervalSince(outageStartTime ?? Date())
+            endOutage(id: outageId)
+
+            // Fire event hook
+            EventHookManager.shared.notifyOutageEnded(layer: "recovered", duration: duration)
+
             currentOutageId = nil
             outageStartTime = nil
         }
@@ -256,12 +277,15 @@ class HistoryStore {
             COUNT(*) as total,
             SUM(CASE WHEN error_layer IS NULL THEN 1 ELSE 0 END) as up
         FROM events
-        WHERE timestamp > datetime('now', '-\(hours) hours', 'localtime');
+        WHERE timestamp > datetime('now', ? || ' hours', 'localtime');
         """
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 100 }
         defer { sqlite3_finalize(stmt) }
+
+        let hoursParam = "-\(hours)"
+        sqlite3_bind_text(stmt, 1, hoursParam, -1, nil)
 
         if sqlite3_step(stmt) == SQLITE_ROW {
             let total = sqlite3_column_int(stmt, 0)
@@ -278,13 +302,16 @@ class HistoryStore {
         let sql = """
         SELECT COALESCE(SUM(duration_seconds), 0)
         FROM outages
-        WHERE start_time > datetime('now', '-\(hours) hours', 'localtime')
+        WHERE start_time > datetime('now', ? || ' hours', 'localtime')
         AND resolved = 1;
         """
 
         var stmt: OpaquePointer?
         guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return 0 }
         defer { sqlite3_finalize(stmt) }
+
+        let hoursParam = "-\(hours)"
+        sqlite3_bind_text(stmt, 1, hoursParam, -1, nil)
 
         if sqlite3_step(stmt) == SQLITE_ROW {
             return Int(sqlite3_column_int(stmt, 0))
@@ -360,13 +387,21 @@ class HistoryStore {
 
     private func cleanupOldRecords() {
         let retentionDays = Preferences.shared.historyRetentionDays
+        let daysParam = "-\(retentionDays) days"
 
-        let cleanupSQL = """
-        DELETE FROM events WHERE timestamp < datetime('now', '-\(retentionDays) days', 'localtime');
-        DELETE FROM outages WHERE start_time < datetime('now', '-\(retentionDays) days', 'localtime') AND resolved = 1;
-        DELETE FROM speed_tests WHERE timestamp < datetime('now', '-\(retentionDays) days', 'localtime');
-        """
+        cleanupTable("events", column: "timestamp", daysParam: daysParam)
+        cleanupTable("outages", column: "start_time", daysParam: daysParam, extraCondition: "AND resolved = 1")
+        cleanupTable("speed_tests", column: "timestamp", daysParam: daysParam)
+    }
 
-        executeSQL(cleanupSQL)
+    private func cleanupTable(_ table: String, column: String, daysParam: String, extraCondition: String = "") {
+        let sql = "DELETE FROM \(table) WHERE \(column) < datetime('now', ?, 'localtime') \(extraCondition);"
+
+        var stmt: OpaquePointer?
+        guard sqlite3_prepare_v2(db, sql, -1, &stmt, nil) == SQLITE_OK else { return }
+        defer { sqlite3_finalize(stmt) }
+
+        sqlite3_bind_text(stmt, 1, daysParam, -1, nil)
+        sqlite3_step(stmt)
     }
 }
