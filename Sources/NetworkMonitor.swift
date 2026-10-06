@@ -1,267 +1,363 @@
 import Foundation
 import SystemConfiguration
 import Network
+import CoreWLAN
 
-class NetworkMonitor {
-    var onStatusChange: ((NetworkStatus) -> Void)?
-    private(set) var currentStatus: NetworkStatus = .unknown
+/// Main network monitoring coordinator
+/// Delegates to specialized modules for specific checks
+public class NetworkMonitor {
+    public var onStatusChange: ((NetworkStatus) -> Void)?
+    @ThreadSafe public private(set) var currentStatus: NetworkStatus = .unknown
+    @ThreadSafe private var previousStatus: NetworkStatus?
     private var timer: Timer?
     private let pathMonitor = NWPathMonitor()
     private let monitorQueue = DispatchQueue(label: "com.toocheapfi.networkmonitor")
-    
-    func startMonitoring() {
-        // Initial check
+
+    // Specialized analyzers
+    private let connectivityChecker = ConnectivityChecker()
+    private let wifiAnalyzer = WiFiAnalyzer()
+    private let issueAnalyzer = IssueAnalyzer()
+
+    // Speed test state (thread-safe)
+    @ThreadSafe private var lastSpeedTest: SpeedTestResult = .notRun
+    @ThreadSafe private var speedTestInProgress = false
+
+    // Pause/resume state
+    @ThreadSafe public private(set) var isPaused = false
+    @ThreadSafe private var pauseEndTime: Date?
+
+    // Reusable URLSession for speed tests
+    private lazy var speedTestSession: URLSession = {
+        let config = URLSessionConfiguration.ephemeral
+        config.timeoutIntervalForRequest = 30
+        config.timeoutIntervalForResource = 60
+        config.waitsForConnectivity = false
+        return URLSession(configuration: config)
+    }()
+
+    public init() {}
+
+    deinit {
+        stopMonitoring()
+    }
+
+    private var speedTestURL: String {
+        let bytes = Preferences.shared.speedTestSizeMB * 1_000_000
+        return "https://speed.cloudflare.com/__down?bytes=\(bytes)"
+    }
+
+    // MARK: - Lifecycle
+
+    public func startMonitoring() {
         checkStatus()
-        
-        // Set up periodic checks every 5 seconds
-        timer = Timer.scheduledTimer(withTimeInterval: 5.0, repeats: true) { [weak self] _ in
+
+        let interval = TimeInterval(Preferences.shared.checkIntervalSeconds)
+        timer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
             self?.checkStatus()
         }
-        
-        // Also monitor for network path changes
-        pathMonitor.pathUpdateHandler = { [weak self] path in
+
+        pathMonitor.pathUpdateHandler = { [weak self] _ in
             DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
                 self?.checkStatus()
             }
         }
         pathMonitor.start(queue: monitorQueue)
     }
-    
-    func stopMonitoring() {
+
+    public func stopMonitoring() {
         timer?.invalidate()
         timer = nil
         pathMonitor.cancel()
     }
-    
-    func checkStatus() {
+
+    // MARK: - Pause/Resume
+
+    /// Pauses monitoring for the specified number of minutes
+    public func pauseMonitoring(minutes: Int) {
+        isPaused = true
+        pauseEndTime = Date().addingTimeInterval(TimeInterval(minutes * 60))
+        logInfo("Monitoring paused for \(minutes) minutes")
+    }
+
+    /// Resumes monitoring immediately
+    public func resumeMonitoring() {
+        isPaused = false
+        pauseEndTime = nil
+        logInfo("Monitoring resumed")
+        checkStatus()
+    }
+
+    /// Returns the remaining pause time in seconds, or nil if not paused
+    public var remainingPauseTime: TimeInterval? {
+        guard isPaused, let endTime = pauseEndTime else { return nil }
+        let remaining = endTime.timeIntervalSinceNow
+        return remaining > 0 ? remaining : nil
+    }
+
+    /// Checks if pause has expired and auto-resumes if needed
+    private func checkPauseExpiry() {
+        guard isPaused else { return }
+        if let endTime = pauseEndTime, Date() >= endTime {
+            logInfo("Pause expired, auto-resuming")
+            isPaused = false
+            pauseEndTime = nil
+        }
+    }
+
+    // MARK: - Status Check
+
+    public func checkStatus() {
+        // Check if pause has expired
+        checkPauseExpiry()
+
+        // Skip check if paused
+        guard !isPaused else {
+            logDebug("Status check skipped (monitoring paused)")
+            return
+        }
         DispatchQueue.global(qos: .userInitiated).async { [weak self] in
             guard let self = self else { return }
-            
-            // Check Wi-Fi
-            let (wifiConnected, wifiStatus) = self.checkWiFi()
-            
-            // Check Router (local gateway)
-            let (routerReachable, routerStatus) = self.checkRouter()
-            
-            // Check ISP (internet connectivity)
-            let (ispReachable, ispStatus) = self.checkISP()
-            
-            // Check DNS
-            let (dnsWorking, dnsStatus) = self.checkDNS()
-            
-            // Generate diagnoses and fixes
-            let diagnoses = self.generateDiagnoses(
-                wifi: wifiConnected,
-                router: routerReachable,
-                isp: ispReachable,
-                dns: dnsWorking
-            )
-            
-            let fixes = self.generateFixes(
-                wifi: wifiConnected,
-                router: routerReachable,
-                isp: ispReachable,
-                dns: dnsWorking
-            )
-            
-            let status = NetworkStatus(
-                wifiConnected: wifiConnected,
-                wifiStatus: wifiStatus,
-                routerReachable: routerReachable,
-                routerStatus: routerStatus,
-                ispReachable: ispReachable,
-                ispStatus: ispStatus,
-                dnsWorking: dnsWorking,
-                dnsStatus: dnsStatus,
-                diagnoses: diagnoses,
-                suggestedFixes: fixes
-            )
-            
+
+            var status = NetworkStatus.unknown
+
+            // Layer 1: Check interface
+            let interfaceResult = self.checkInterface()
+            status.interfaceType = interfaceResult.type
+            status.interfaceName = interfaceResult.name
+            status.localIP = interfaceResult.localIP
+            status.hasIPv6 = interfaceResult.hasIPv6
+
+            // Layer 1.5: Wi-Fi details
+            if interfaceResult.type == .wifi {
+                status.wifiInfo = self.wifiAnalyzer.getWiFiInfo()
+            }
+
+            // Layer 2: Gateway
+            let gatewayResult = self.connectivityChecker.checkGateway()
+            status.gatewayReachable = gatewayResult.reachable
+            status.gatewayIP = gatewayResult.gatewayIP
+            status.gatewayLatency = gatewayResult.latency
+
+            // Layer 3: Internet
+            let internetResult = self.connectivityChecker.checkInternet()
+            status.internetReachable = internetResult.reachable
+            status.internetLatency = internetResult.latency
+            status.testedTargets = internetResult.testedTargets
+
+            // Layer 4: DNS
+            let dnsResult = self.connectivityChecker.checkDNS()
+            status.dnsWorking = dnsResult.working
+            status.dnsLatency = dnsResult.latency
+            status.testedDomains = dnsResult.testedDomains
+
+            // Layer 5: HTTP / Captive portal
+            let httpResult = self.connectivityChecker.checkHTTP()
+            status.httpWorking = httpResult.httpWorking
+            status.captivePortalDetected = httpResult.captivePortalDetected
+            status.captivePortalURL = httpResult.captivePortalURL
+
+            // Wi-Fi channel analysis
+            if interfaceResult.type == .wifi {
+                let channelResult = self.wifiAnalyzer.analyzeChannels()
+                status.neighboringNetworks = channelResult.neighbors
+                status.channelAnalysis = channelResult.analysis2GHz
+                status.recommendedChannel = channelResult.recommended2GHz
+                status.channelAnalysis5GHz = channelResult.analysis5GHz
+                status.recommendedChannel5GHz = channelResult.recommended5GHz
+            }
+
+            // Speed test result
+            status.speedTest = self.lastSpeedTest
+
+            // Issue analysis and quality scoring
+            let analysisResult = self.issueAnalyzer.analyze(status)
+            status.issues = analysisResult.issues
+            status.recommendations = analysisResult.recommendations
+            status.qualityScore = analysisResult.qualityScore
+            status.overallQuality = analysisResult.overallQuality
+
             DispatchQueue.main.async {
+                let oldStatus = self.previousStatus
+
+                NotificationManager.shared.handleStatusChange(from: oldStatus, to: status)
+                HistoryStore.shared.recordStatus(status)
+
+                // Fire event hooks
+                EventHookManager.shared.notifyStatusChanged(from: oldStatus, to: status)
+
+                self.previousStatus = self.currentStatus
                 self.currentStatus = status
                 self.onStatusChange?(status)
             }
         }
     }
-    
-    // MARK: - Network Checks
-    
-    private func checkWiFi() -> (Bool, String) {
-        // Check if network interface is up and has an IP address
-        var addrs: UnsafeMutablePointer<ifaddrs>?
-        var connected = false
-        
-        guard getifaddrs(&addrs) == 0 else {
-            return (false, "Unable to check")
+
+    // MARK: - Speed Test
+
+    public func runSpeedTest(completion: @escaping (SpeedTestResult) -> Void) {
+        guard !speedTestInProgress else {
+            completion(lastSpeedTest)
+            return
         }
-        
+
+        speedTestInProgress = true
+        lastSpeedTest = SpeedTestResult(
+            downloadSpeed: nil,
+            uploadSpeed: nil,
+            testTime: Date(),
+            testServer: "Cloudflare",
+            status: .running
+        )
+
+        DispatchQueue.main.async {
+            var status = self.currentStatus
+            status.speedTest = self.lastSpeedTest
+            self.onStatusChange?(status)
+        }
+
+        guard let url = URL(string: speedTestURL) else {
+            logError("Speed test failed: Invalid URL - \(speedTestURL)")
+            lastSpeedTest.status = .failed
+            speedTestInProgress = false
+            completion(lastSpeedTest)
+            return
+        }
+
+        let startTime = CFAbsoluteTimeGetCurrent()
+
+        speedTestSession.dataTask(with: url) { [weak self] data, _, error in
+            guard let self = self else { return }
+
+            defer {
+                self.speedTestInProgress = false
+            }
+
+            if let error = error {
+                logError("Speed test failed: \(error.localizedDescription)")
+                self.lastSpeedTest.status = .failed
+                completion(self.lastSpeedTest)
+                return
+            }
+
+            guard let data = data else {
+                logError("Speed test failed: No data received")
+                self.lastSpeedTest.status = .failed
+                completion(self.lastSpeedTest)
+                return
+            }
+
+            let elapsed = CFAbsoluteTimeGetCurrent() - startTime
+            let bytesDownloaded = Double(data.count)
+            let megabits = (bytesDownloaded * 8) / 1_000_000
+            let speedMbps = megabits / elapsed
+
+            self.lastSpeedTest = SpeedTestResult(
+                downloadSpeed: speedMbps,
+                uploadSpeed: nil,
+                testTime: Date(),
+                testServer: "Cloudflare",
+                status: .completed
+            )
+
+            HistoryStore.shared.recordSpeedTest(self.lastSpeedTest)
+
+            // Fire event hook
+            EventHookManager.shared.notifySpeedTestCompleted(result: self.lastSpeedTest)
+
+            DispatchQueue.main.async {
+                var status = self.currentStatus
+                status.speedTest = self.lastSpeedTest
+                self.currentStatus = status
+                self.onStatusChange?(status)
+            }
+
+            completion(self.lastSpeedTest)
+        }.resume()
+    }
+
+    // MARK: - Interface Detection
+
+    private struct InterfaceResult {
+        let type: InterfaceType
+        let name: String?
+        let localIP: String?
+        let hasIPv6: Bool
+    }
+
+    private func checkInterface() -> InterfaceResult {
+        var interfaceType: InterfaceType = .none
+        var interfaceName: String?
+        var localIP: String?
+        var hasIPv6 = false
+
+        // Check Wi-Fi using CoreWLAN
+        if let wifiClient = CWWiFiClient.shared().interface(),
+           wifiClient.ssid() != nil {
+            interfaceType = .wifi
+            interfaceName = wifiClient.interfaceName
+        }
+
+        // Get IP addresses
+        var addrs: UnsafeMutablePointer<ifaddrs>?
+        guard getifaddrs(&addrs) == 0 else {
+            return InterfaceResult(type: .none, name: nil, localIP: nil, hasIPv6: false)
+        }
         defer { freeifaddrs(addrs) }
-        
+
         var ptr = addrs
         while ptr != nil {
             defer { ptr = ptr?.pointee.ifa_next }
-            
+
             guard let interface = ptr?.pointee else { continue }
             let name = String(cString: interface.ifa_name)
-            
-            // Check for common network interfaces (en0, en1, en2 are typical on macOS)
-            // Skip loopback (lo0) and bridge interfaces
-            if name.hasPrefix("en") && !name.contains("bridge") {
-                let flags = Int32(interface.ifa_flags)
-                // Check if interface is up and running
-                if (flags & (IFF_UP | IFF_RUNNING)) == (IFF_UP | IFF_RUNNING) {
-                    if interface.ifa_addr?.pointee.sa_family == UInt8(AF_INET) {
-                        connected = true
-                        // Get IP address
-                        var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
-                        if getnameinfo(interface.ifa_addr, socklen_t(interface.ifa_addr.pointee.sa_len),
-                                     &hostname, socklen_t(hostname.count),
-                                     nil, socklen_t(0), NI_NUMERICHOST) == 0 {
-                            let address = String(cString: hostname)
-                            return (true, "Connected (\(address))")
-                        }
+
+            if name == "lo0" { continue }
+
+            let flags = Int32(interface.ifa_flags)
+            guard (flags & (IFF_UP | IFF_RUNNING)) == (IFF_UP | IFF_RUNNING) else { continue }
+
+            let family = interface.ifa_addr?.pointee.sa_family
+
+            if family == UInt8(AF_INET) {
+                var hostname = [CChar](repeating: 0, count: Int(NI_MAXHOST))
+                if getnameinfo(
+                    interface.ifa_addr,
+                    socklen_t(interface.ifa_addr.pointee.sa_len),
+                    &hostname,
+                    socklen_t(hostname.count),
+                    nil,
+                    socklen_t(0),
+                    NI_NUMERICHOST
+                ) == 0 {
+                    let address = String(cString: hostname)
+
+                    if address.hasPrefix("169.254.") { continue }
+
+                    if localIP == nil {
+                        localIP = address
+                    }
+
+                    if interfaceType == .none {
+                        (interfaceType, interfaceName) = classifyInterface(name)
                     }
                 }
+            } else if family == UInt8(AF_INET6) {
+                hasIPv6 = true
             }
         }
-        
-        return (connected, connected ? "Connected" : "Not Connected")
+
+        return InterfaceResult(type: interfaceType, name: interfaceName, localIP: localIP, hasIPv6: hasIPv6)
     }
-    
-    private func checkRouter() -> (Bool, String) {
-        // Try to ping the default gateway
-        guard let gateway = getDefaultGateway() else {
-            return (false, "No gateway found")
+
+    private func classifyInterface(_ name: String) -> (InterfaceType, String) {
+        if name.hasPrefix("en") {
+            return (.ethernet, name)
+        } else if name.hasPrefix("utun") || name.hasPrefix("ipsec") {
+            return (.vpn, name)
+        } else if name.hasPrefix("pdp_ip") {
+            return (.cellular, name)
+        } else {
+            return (.other, name)
         }
-        
-        let reachable = pingHost(gateway, timeout: 2.0)
-        return (reachable, reachable ? "Reachable (\(gateway))" : "Unreachable (\(gateway))")
-    }
-    
-    private func checkISP() -> (Bool, String) {
-        // Try to reach a well-known internet host (using IP to bypass DNS)
-        // Using Google's public DNS IP
-        let testIP = "8.8.8.8"
-        let reachable = pingHost(testIP, timeout: 3.0)
-        return (reachable, reachable ? "Connected" : "No Internet")
-    }
-    
-    private func checkDNS() -> (Bool, String) {
-        // Try to resolve a well-known domain
-        let semaphore = DispatchSemaphore(value: 0)
-        var resolved = false
-        
-        let host = CFHostCreateWithName(nil, "www.google.com" as CFString).takeRetainedValue()
-        
-        // Set timeout using dispatch
-        DispatchQueue.global().asyncAfter(deadline: .now() + 2.0) {
-            CFHostCancelInfoResolution(host, .addresses)
-            semaphore.signal()
-        }
-        
-        CFHostStartInfoResolution(host, .addresses, nil)
-        
-        var success: DarwinBoolean = false
-        if let addresses = CFHostGetAddressing(host, &success)?.takeUnretainedValue() as? [Data], 
-           !addresses.isEmpty, success.boolValue {
-            resolved = true
-            semaphore.signal()
-        }
-        
-        _ = semaphore.wait(timeout: .now() + 3.0)
-        
-        // Ensure cleanup
-        CFHostCancelInfoResolution(host, .addresses)
-        
-        return (resolved, resolved ? "Working" : "Failed")
-    }
-    
-    // MARK: - Helper Functions
-    
-    private func getDefaultGateway() -> String? {
-        // Get default gateway using SystemConfiguration
-        guard let routeInfo = SCDynamicStoreCopyValue(nil, "State:/Network/Global/IPv4" as CFString) as? [String: Any],
-              let routerAddress = routeInfo["Router"] as? String else {
-            return nil
-        }
-        return routerAddress
-    }
-    
-    private func pingHost(_ host: String, timeout: TimeInterval) -> Bool {
-        let semaphore = DispatchSemaphore(value: 0)
-        var isReachable = false
-        
-        let task = Process()
-        task.executableURL = URL(fileURLWithPath: "/sbin/ping")
-        task.arguments = ["-c", "1", "-t", "2", host]
-        
-        let pipe = Pipe()
-        task.standardOutput = pipe
-        task.standardError = pipe
-        
-        task.terminationHandler = { process in
-            isReachable = process.terminationStatus == 0
-            semaphore.signal()
-        }
-        
-        do {
-            try task.run()
-        } catch {
-            semaphore.signal()
-            return false
-        }
-        
-        _ = semaphore.wait(timeout: .now() + timeout + 1.0)
-        
-        if task.isRunning {
-            task.terminate()
-        }
-        
-        return isReachable
-    }
-    
-    // MARK: - Diagnosis and Fixes
-    
-    private func generateDiagnoses(wifi: Bool, router: Bool, isp: Bool, dns: Bool) -> [String] {
-        var diagnoses: [String] = []
-        
-        if !wifi {
-            diagnoses.append("Your device is not connected to Wi-Fi")
-        } else if !router {
-            diagnoses.append("Connected to Wi-Fi but router is unreachable")
-        } else if !isp {
-            diagnoses.append("Router works but no internet from ISP")
-        } else if !dns {
-            diagnoses.append("Internet works but DNS resolution is failing")
-        }
-        
-        return diagnoses
-    }
-    
-    private func generateFixes(wifi: Bool, router: Bool, isp: Bool, dns: Bool) -> [String] {
-        var fixes: [String] = []
-        
-        if !wifi {
-            fixes.append("1. Check if Wi-Fi is enabled in System Settings")
-            fixes.append("2. Select a Wi-Fi network to connect to")
-            fixes.append("3. Check if Airplane Mode is off")
-        } else if !router {
-            fixes.append("1. Check if router is powered on")
-            fixes.append("2. Verify router lights indicate normal operation")
-            fixes.append("3. Try restarting your router (unplug for 30 sec)")
-            fixes.append("4. Check Ethernet cable connections")
-        } else if !isp {
-            fixes.append("1. Restart your modem (unplug for 30 sec)")
-            fixes.append("2. Check if other devices have internet")
-            fixes.append("3. Contact your ISP to check for outages")
-            fixes.append("4. Check if your ISP bill is paid")
-        } else if !dns {
-            fixes.append("1. Try using Google DNS (8.8.8.8, 8.8.4.4)")
-            fixes.append("2. Open System Settings > Network > Advanced")
-            fixes.append("3. Go to DNS tab and add 8.8.8.8")
-            fixes.append("4. Restart your computer")
-        }
-        
-        return fixes
     }
 }

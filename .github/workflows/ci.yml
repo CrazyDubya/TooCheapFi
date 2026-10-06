@@ -1,0 +1,196 @@
+name: CI
+
+on:
+  push:
+    branches: [main, 'claude/*']
+  pull_request:
+    branches: [main]
+
+jobs:
+  lint:
+    name: SwiftLint
+    runs-on: macos-14
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install SwiftLint
+        run: brew install swiftlint
+
+      - name: Lint Sources
+        run: swiftlint lint Sources/ --strict --reporter github-actions-logging
+
+      - name: Lint Tests
+        run: swiftlint lint Tests/ --config Tests/.swiftlint.yml --reporter github-actions-logging
+
+  build:
+    name: Build & Test
+    needs: lint
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [macos-13, macos-14]
+      fail-fast: false
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.9'
+
+      - name: Build (Debug)
+        run: swift build
+
+      - name: Build (Release)
+        run: swift build -c release
+
+      - name: Run Tests with Coverage
+        run: swift test --enable-code-coverage
+
+      - name: Generate Coverage Report
+        continue-on-error: true  # Coverage is nice-to-have, don't fail CI
+        run: |
+          BIN_PATH=$(swift build --show-bin-path)
+          PROFDATA_PATH=".build/debug/codecov/default.profdata"
+
+          # Find the test bundle
+          XCTEST_PATH=$(find .build -name "*.xctest" -type d 2>/dev/null | head -1)
+
+          if [ -z "$XCTEST_PATH" ]; then
+            echo "::warning::No .xctest bundle found, skipping coverage"
+            exit 0
+          fi
+
+          if [ ! -f "$PROFDATA_PATH" ]; then
+            echo "::warning::Profile data not found at $PROFDATA_PATH, skipping coverage"
+            exit 0
+          fi
+
+          EXEC_PATH="$XCTEST_PATH/Contents/MacOS/$(basename $XCTEST_PATH .xctest)"
+
+          if [ ! -f "$EXEC_PATH" ]; then
+            echo "::warning::Test executable not found at $EXEC_PATH, skipping coverage"
+            exit 0
+          fi
+
+          echo "Generating coverage from: $EXEC_PATH"
+          xcrun llvm-cov export "$EXEC_PATH" \
+            -instr-profile "$PROFDATA_PATH" \
+            -format="lcov" > coverage.lcov 2>&1 || {
+              echo "::warning::Coverage export failed"
+              exit 0
+            }
+
+          if [ -f coverage.lcov ] && [ -s coverage.lcov ]; then
+            echo "Coverage report generated successfully"
+            wc -l coverage.lcov
+          else
+            echo "::warning::Coverage report is empty or missing"
+          fi
+
+      - name: Check Binary Size
+        run: |
+          SIZE=$(stat -f%z .build/release/TooCheapFi 2>/dev/null || stat --printf="%s" .build/release/TooCheapFi 2>/dev/null)
+          SIZE_MB=$((SIZE / 1024 / 1024))
+          echo "Binary size: ${SIZE_MB}MB (${SIZE} bytes)"
+          if [ $SIZE -gt 52428800 ]; then
+            echo "::error::Binary exceeds 50MB limit"
+            exit 1
+          fi
+
+      - name: Check Version Flag
+        run: .build/release/TooCheapFi --version
+
+      - name: Check Help Flag
+        run: .build/release/TooCheapFi --help
+
+      - name: Archive Release Binary
+        uses: actions/upload-artifact@v4
+        if: matrix.os == 'macos-14'
+        with:
+          name: TooCheapFi-macos
+          path: .build/release/TooCheapFi
+
+      - name: Upload Coverage
+        uses: codecov/codecov-action@v4
+        if: matrix.os == 'macos-14'
+        with:
+          files: coverage.lcov
+          fail_ci_if_error: false
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+  release:
+    name: Release
+    needs: build
+    runs-on: macos-14
+    if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Swift
+        uses: swift-actions/setup-swift@v2
+        with:
+          swift-version: '5.9'
+
+      - name: Build Universal Binary
+        run: |
+          swift build -c release --arch arm64
+          swift build -c release --arch x86_64
+          mkdir -p dist
+          lipo -create \
+            .build/arm64-apple-macosx/release/TooCheapFi \
+            .build/x86_64-apple-macosx/release/TooCheapFi \
+            -output dist/TooCheapFi
+
+      - name: Create App Bundle
+        run: |
+          APP_DIR="dist/TooCheapFi.app/Contents"
+          mkdir -p "$APP_DIR/MacOS"
+          mkdir -p "$APP_DIR/Resources"
+          cp dist/TooCheapFi "$APP_DIR/MacOS/"
+
+          cat > "$APP_DIR/Info.plist" << 'PLIST'
+          <?xml version="1.0" encoding="UTF-8"?>
+          <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+          <plist version="1.0">
+          <dict>
+            <key>CFBundleDevelopmentRegion</key><string>en</string>
+            <key>CFBundleExecutable</key><string>TooCheapFi</string>
+            <key>CFBundleIdentifier</key><string>com.crazydubya.toocheapfi</string>
+            <key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+            <key>CFBundleName</key><string>TooCheapFi</string>
+            <key>CFBundlePackageType</key><string>APPL</string>
+            <key>CFBundleShortVersionString</key><string>${{ github.ref_name }}</string>
+            <key>CFBundleVersion</key><string>${{ github.ref_name }}</string>
+            <key>LSMinimumSystemVersion</key><string>12.0</string>
+            <key>LSUIElement</key><true/>
+            <key>NSHighResolutionCapable</key><true/>
+            <key>NSPrincipalClass</key><string>NSApplication</string>
+          </dict>
+          </plist>
+          PLIST
+
+      - name: Create DMG
+        run: |
+          hdiutil create -volname "TooCheapFi" \
+            -srcfolder dist/TooCheapFi.app \
+            -ov -format UDZO \
+            dist/TooCheapFi-${{ github.ref_name }}-macos-universal.dmg
+
+      - name: Create Archive
+        run: |
+          cd dist
+          tar -czvf TooCheapFi-${{ github.ref_name }}-macos-universal.tar.gz TooCheapFi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v1
+        with:
+          files: |
+            dist/TooCheapFi-${{ github.ref_name }}-macos-universal.tar.gz
+            dist/TooCheapFi-${{ github.ref_name }}-macos-universal.dmg
+          generate_release_notes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
